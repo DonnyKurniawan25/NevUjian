@@ -1,0 +1,583 @@
+/* ===== Mobile Responsive Styles ===== */
+
+/* --- Mobile Bottom Navigation --- */
+.mobile-bottom-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border-color);
+    padding: 0.4rem 0 calc(0.4rem + env(safe-area-inset-bottom));
+    z-index: 100;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(16px);
+    background: rgba(255, 255, 255, 0.98);
+}
+
+[data-theme="dark"] .mobile-bottom-nav {
+    background: rgba(30, 41, 59, 0.98);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.mobile-nav-items {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 0 0.25rem;
+}
+
+.mobile-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.5rem 0.5rem;
+    border-radius: var(--radius-md);
+    color: var(--text-tertiary);
+    font-size: 0.7rem;
+    font-weight: 600;
+    transition: all var(--transition-fast);
+    cursor: pointer;
+    border: none;
+    background: none;
+    min-width: 56px;
+    text-align: center;
+    position: relative;
+}
+
+.mobile-nav-item:active {
+    transform: scale(0.92);
+    background: var(--bg-tertiary);
+}
+
+.mobile-nav-item svg {
+    width: 24px;
+    height: 24px;
+    transition: all var(--transition-base);
+    stroke-width: 2;
+}
+
+.mobile-nav-item.active {
+    color: var(--primary-600);
+}
+
+[data-theme="dark"] .mobile-nav-item.active {
+    color: var(--primary-400);
+}
+
+.mobile-nav-item.active svg {
+    transform: translateY(-3px) scale(1.1);
+    filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.3));
+}
+
+.mobile-nav-item.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 32px;
+    height: 3px;
+    background: var(--primary-500);
+    border-radius: 0 0 3px 3px;
+}
+
+.mobile-nav-item span {
+    font-size: 0.65rem;
+    letter-spacing: 0.02em;
+    font-weight: 600;
+}
+
+/* Mobile overlay for sidebar */
+.mobile-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 98;
+    animation: fadeIn 0.2s ease;
+    backdrop-filter: blur(2px);
+}
+
+/* --- Responsive Breakpoints --- */
+@media (max-width: 1024px) {
+    .sidebar {
+        width: 240px;
+    }
+
+    .main-content {
+        margin-left: 240px;
+    }
+}
+
+@media (max-width: 768px) {
+
+    /* Layout adjustments */
+    .sidebar {
+        transform: translateX(-100%);
+        z-index: 99;
+        width: 280px;
+        box-shadow: var(--shadow-xl);
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    .mobile-overlay {
+        display: block;
+    }
+
+    .main-content {
+        margin-left: 0;
+        padding-bottom: var(--mobile-bottom-nav-height);
+    }
+
+    .page-content {
+        padding: 0.875rem;
+        padding-bottom: 1.5rem;
+    }
+
+    /* Topbar mobile */
+    .topbar {
+        height: var(--mobile-topbar-height);
+        padding: 0 0.875rem;
+        position: sticky;
+        top: 0;
+    }
+
+    .topbar-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+    }
+
+    .topbar-left button {
+        display: flex !important;
+        margin-right: 0.5rem;
+    }
+
+    .mobile-bottom-nav {
+        display: block;
+    }
+
+    /* Cards mobile */
+    .card {
+        border-radius: var(--radius-md);
+        margin-bottom: 0.875rem;
+    }
+
+    .card-header {
+        padding: 0.875rem 1rem;
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 0.75rem;
+    }
+
+    .card-header .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .card-body {
+        padding: 1rem;
+    }
+
+    .card-title {
+        font-size: 1rem;
+    }
+
+    /* Stat grid mobile */
+    .stat-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .stat-card {
+        padding: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .stat-card-icon {
+        width: 48px !important;
+        height: 48px !important;
+        flex-shrink: 0;
+    }
+
+    .stat-card-content {
+        flex: 1;
+        text-align: left;
+    }
+
+    .stat-card-value {
+        font-size: 1.75rem;
+        line-height: 1;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-card-label {
+        font-size: 0.8rem;
+    }
+
+    /* Search and filters */
+    .flex-between {
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: stretch !important;
+    }
+
+    .flex-between>* {
+        width: 100% !important;
+    }
+
+    .flex-between .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Form mobile */
+    .form-row {
+        grid-template-columns: 1fr !important;
+        gap: 0.875rem;
+    }
+
+    .form-group {
+        margin-bottom: 0.875rem;
+    }
+
+    .form-label {
+        font-size: 0.875rem;
+        margin-bottom: 0.4rem;
+    }
+
+    .form-input,
+    .form-select,
+    .form-textarea {
+        font-size: 16px;
+        /* Prevents zoom on iOS */
+        padding: 0.75rem;
+    }
+
+    .form-hint,
+    .form-error {
+        font-size: 0.75rem;
+    }
+
+    /* Buttons mobile */
+    .btn {
+        padding: 0.75rem 1.25rem;
+        font-size: 0.9rem;
+        width: 100%;
+        justify-content: center;
+    }
+
+    .btn-sm {
+        padding: 0.6rem 1rem;
+        font-size: 0.85rem;
+    }
+
+    .btn-lg {
+        padding: 0.875rem 1.5rem;
+        font-size: 1rem;
+    }
+
+    .btn-icon {
+        width: 40px;
+        height: 40px;
+    }
+
+    .btn-group {
+        flex-direction: column;
+        width: 100%;
+        gap: 0.5rem;
+    }
+
+    .btn-group .btn {
+        width: 100%;
+    }
+
+    /* Table mobile */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -1rem;
+        padding: 0 1rem;
+    }
+
+    table {
+        min-width: 600px;
+        font-size: 0.85rem;
+    }
+
+    table th,
+    table td {
+        padding: 0.75rem 0.5rem;
+    }
+
+    /* Badge mobile */
+    .badge {
+        font-size: 0.7rem;
+        padding: 0.25rem 0.6rem;
+    }
+
+    /* Empty state mobile */
+    .empty-state {
+        padding: 2rem 1rem;
+    }
+
+    .empty-state-icon {
+        width: 56px;
+        height: 56px;
+    }
+
+    .empty-state-title {
+        font-size: 1.1rem;
+    }
+
+    .empty-state-text {
+        font-size: 0.875rem;
+    }
+
+    /* Access mode grid */
+    .access-mode-grid {
+        grid-template-columns: 1fr !important;
+        gap: 0.75rem;
+    }
+
+    .access-mode-option {
+        padding: 1rem;
+        display: flex;
+        align-items: center;
+        text-align: left;
+        gap: 1rem;
+    }
+
+    .access-mode-icon {
+        width: 56px !important;
+        height: 56px !important;
+        margin: 0 !important;
+        flex-shrink: 0;
+    }
+
+    .access-mode-content {
+        flex: 1;
+    }
+
+    .access-mode-title {
+        font-size: 0.95rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .access-mode-desc {
+        font-size: 0.8rem;
+    }
+
+    /* Toggle mobile */
+    .toggle-wrapper {
+        padding: 0.875rem 0;
+    }
+
+    .toggle-label {
+        font-size: 0.9rem;
+    }
+
+    .toggle-hint {
+        font-size: 0.75rem;
+        margin-top: 0.15rem;
+    }
+
+    /* Exam card mobile */
+    .card .flex-between {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 1rem;
+    }
+
+    .card .flex-between>div:first-child {
+        width: 100%;
+    }
+
+    .card .flex-between .flex {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .card h3 {
+        font-size: 1.05rem;
+        line-height: 1.3;
+        margin-bottom: 0.5rem;
+    }
+
+    .card .flex[style*="gap"] {
+        flex-wrap: wrap;
+        gap: 0.5rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+
+    /* Extra small screens */
+    .page-content {
+        padding: 0.75rem;
+    }
+
+    .topbar {
+        padding: 0 0.75rem;
+    }
+
+    .topbar-title {
+        font-size: 0.95rem;
+    }
+
+    .card-header,
+    .card-body {
+        padding: 0.875rem;
+    }
+
+    .stat-card {
+        padding: 0.875rem;
+    }
+
+    .stat-card-icon {
+        width: 42px !important;
+        height: 42px !important;
+    }
+
+    .stat-card-value {
+        font-size: 1.5rem;
+    }
+
+    .stat-card-label {
+        font-size: 0.75rem;
+    }
+
+    .mobile-nav-item {
+        min-width: 50px;
+        padding: 0.4rem 0.35rem;
+    }
+
+    .mobile-nav-item svg {
+        width: 22px;
+        height: 22px;
+    }
+
+    .mobile-nav-item span {
+        font-size: 0.6rem;
+    }
+
+    .btn {
+        padding: 0.7rem 1rem;
+        font-size: 0.875rem;
+    }
+
+    .btn-icon {
+        width: 36px;
+        height: 36px;
+    }
+
+    .form-input,
+    .form-select,
+    .form-textarea {
+        padding: 0.7rem;
+    }
+
+    table {
+        font-size: 0.8rem;
+    }
+
+    .badge {
+        font-size: 0.65rem;
+        padding: 0.2rem 0.5rem;
+    }
+}
+
+@media (max-width: 360px) {
+
+    /* Very small screens */
+    .mobile-nav-item span {
+        display: none;
+    }
+
+    .mobile-nav-item {
+        min-width: 44px;
+    }
+
+    .topbar-title {
+        font-size: 0.875rem;
+    }
+}
+
+/* --- Landscape mode on mobile --- */
+@media (max-width: 768px) and (orientation: landscape) {
+    .mobile-bottom-nav {
+        padding: 0.3rem 0 calc(0.3rem + env(safe-area-inset-bottom));
+    }
+
+    .mobile-nav-item {
+        padding: 0.35rem 0.5rem;
+    }
+
+    .mobile-nav-item svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .mobile-nav-item span {
+        font-size: 0.6rem;
+    }
+
+    .topbar {
+        height: 48px;
+    }
+
+    .page-content {
+        padding: 0.75rem;
+    }
+}
+
+/* --- Touch improvements --- */
+@media (hover: none) and (pointer: coarse) {
+
+    /* Touch devices */
+    .btn,
+    .mobile-nav-item,
+    .sidebar-link,
+    .access-mode-option {
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .btn:active {
+        transform: scale(0.97);
+    }
+
+    .card:active {
+        transform: scale(0.995);
+    }
+}
+
+/* --- Safe area support for notched devices --- */
+@supports (padding: max(0px)) {
+    .mobile-bottom-nav {
+        padding-bottom: max(0.4rem, env(safe-area-inset-bottom));
+    }
+
+    .page-content {
+        padding-left: max(0.875rem, env(safe-area-inset-left));
+        padding-right: max(0.875rem, env(safe-area-inset-right));
+    }
+
+    .topbar {
+        padding-left: max(0.875rem, env(safe-area-inset-left));
+        padding-right: max(0.875rem, env(safe-area-inset-right));
+    }
+}
+
+/* Made with Bob */
