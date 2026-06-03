@@ -15,6 +15,16 @@ export default function StudentExamSession() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const intervalRef = useRef(null);
+  const isReportingRef = useRef(false);
+  const hasPendingWarningRef = useRef(false);
+  const violationCountRef = useRef(0);
+
+  // Sync violation count when session loaded
+  useEffect(() => {
+    if (session) {
+      violationCountRef.current = session.violation_count || 0;
+    }
+  }, [session]);
 
   const load = async () => {
     try {
@@ -48,14 +58,62 @@ export default function StudentExamSession() {
 
   // Tab switch detection
   useEffect(() => {
-    const handleVisibility = () => {
-      if (document.hidden && session?.status === 'in_progress') {
-        alert("PERINGATAN: Anda tidak diperbolehkan membuka tab baru atau meninggalkan halaman ujian! Halaman akan kembali ke soal.");
+    if (!session || session.status !== 'in_progress') return;
+
+    const handleViolation = async () => {
+      if (isReportingRef.current) return;
+      isReportingRef.current = true;
+
+      try {
+        const res = await examApi.reportViolation(sessionId);
+        const { violation_count, max_violations, terminated } = res.data;
+        violationCountRef.current = violation_count;
+
+        if (terminated) {
+          alert(`Ujian Anda telah dihentikan secara otomatis karena Anda melanggar aturan tab switching sebanyak ${violation_count} kali!`);
+          navigate('/student/dashboard');
+        } else {
+          hasPendingWarningRef.current = true;
+        }
+      } catch (err) {
+        console.error("Gagal mencatat pelanggaran:", err);
       }
     };
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        handleViolation();
+      } else {
+        isReportingRef.current = false;
+        if (hasPendingWarningRef.current) {
+          hasPendingWarningRef.current = false;
+          alert(`PERINGATAN: Anda terdeteksi meninggalkan halaman ujian!\nJumlah Pelanggaran: ${violationCountRef.current} / ${session.max_violations || 3}.\nJika mencapai batas maksimal, ujian Anda akan dihentikan secara otomatis.`);
+        }
+      }
+    };
+
+    const handleBlur = () => {
+      handleViolation();
+    };
+
+    const handleFocus = () => {
+      isReportingRef.current = false;
+      if (hasPendingWarningRef.current) {
+        hasPendingWarningRef.current = false;
+        alert(`PERINGATAN: Anda terdeteksi meninggalkan halaman ujian!\nJumlah Pelanggaran: ${violationCountRef.current} / ${session.max_violations || 3}.\nJika mencapai batas maksimal, ujian Anda akan dihentikan secara otomatis.`);
+      }
+    };
+
     document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [session]);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [session, sessionId, navigate]);
 
   const saveAnswer = async (questionId, choiceId, essayText = '') => {
     setAnswers(prev => ({

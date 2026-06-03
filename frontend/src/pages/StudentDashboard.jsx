@@ -93,7 +93,7 @@ export default function StudentDashboard() {
                     </button>
                   ) : session?.status === 'submitted' || session?.status === 'timed_out' ? (
                     <span className="badge badge-success" style={{ padding: '0.5rem 1rem', fontSize: '0.82rem' }}>
-                      <CheckCircle size={14} /> Selesai ({session.score?.toFixed?.(1) || '-'})
+                      <CheckCircle size={14} /> Selesai
                     </span>
                   ) : (
                     <button className="btn btn-primary" onClick={() => handleStart(exam)}>
@@ -117,7 +117,6 @@ export default function StudentDashboard() {
                 <thead>
                   <tr>
                     <th>Ujian</th>
-                    <th>Nilai</th>
                     <th>Status</th>
                     <th>Pelanggaran</th>
                     <th>Waktu</th>
@@ -127,9 +126,6 @@ export default function StudentDashboard() {
                   {sessions.map(s => (
                     <tr key={s.id}>
                       <td style={{ fontWeight: 600 }}>{s.exam_title}</td>
-                      <td style={{ fontWeight: 700, color: parseFloat(s.score) >= 70 ? 'var(--success-600)' : 'var(--danger-500)' }}>
-                        {s.score != null ? parseFloat(s.score).toFixed(1) : '-'}
-                      </td>
                       <td>
                         <span className={`badge ${s.status === 'submitted' ? 'badge-success' : s.status === 'in_progress' ? 'badge-warning' : 'badge-danger'}`}>
                           {s.status === 'submitted' ? 'Selesai' : s.status === 'in_progress' ? 'Berlangsung' : s.status === 'timed_out' ? 'Waktu Habis' : 'Dihentikan'}

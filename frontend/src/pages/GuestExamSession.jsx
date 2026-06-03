@@ -18,6 +18,16 @@ export default function GuestExamSession() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const intervalRef = useRef(null);
+  const isReportingRef = useRef(false);
+  const hasPendingWarningRef = useRef(false);
+  const violationCountRef = useRef(0);
+
+  // Sync violation count when session loaded
+  useEffect(() => {
+    if (session) {
+      violationCountRef.current = session.violation_count || 0;
+    }
+  }, [session]);
 
   useEffect(() => {
     if (!guestToken) { navigate('/'); return; }
@@ -47,15 +57,63 @@ export default function GuestExamSession() {
 
   // Tab switch detection
   useEffect(() => {
-    if (result) return;
-    const handler = () => {
-      if (document.hidden && session?.status === 'in_progress') {
-        alert("PERINGATAN: Anda tidak diperbolehkan membuka tab baru atau meninggalkan halaman ujian! Halaman akan kembali ke soal.");
+    if (result || !session || session.status !== 'in_progress') return;
+
+    const handleViolation = async () => {
+      if (isReportingRef.current) return;
+      isReportingRef.current = true;
+
+      try {
+        const res = await guestApi.reportViolation(sessionId);
+        const { violation_count, max_violations, terminated } = res.data;
+        violationCountRef.current = violation_count;
+
+        if (terminated) {
+          alert(`Ujian Anda telah dihentikan secara otomatis karena Anda melanggar aturan tab switching sebanyak ${violation_count} kali!`);
+          const sessionRes = await guestApi.getSession(sessionId);
+          setResult(sessionRes.data);
+        } else {
+          hasPendingWarningRef.current = true;
+        }
+      } catch (err) {
+        console.error("Gagal mencatat pelanggaran:", err);
       }
     };
-    document.addEventListener('visibilitychange', handler);
-    return () => document.removeEventListener('visibilitychange', handler);
-  }, [session, result]);
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        handleViolation();
+      } else {
+        isReportingRef.current = false;
+        if (hasPendingWarningRef.current) {
+          hasPendingWarningRef.current = false;
+          alert(`PERINGATAN: Anda terdeteksi meninggalkan halaman ujian!\nJumlah Pelanggaran: ${violationCountRef.current} / ${session.max_violations || 3}.\nJika mencapai batas maksimal, ujian Anda akan dihentikan secara otomatis.`);
+        }
+      }
+    };
+
+    const handleBlur = () => {
+      handleViolation();
+    };
+
+    const handleFocus = () => {
+      isReportingRef.current = false;
+      if (hasPendingWarningRef.current) {
+        hasPendingWarningRef.current = false;
+        alert(`PERINGATAN: Anda terdeteksi meninggalkan halaman ujian!\nJumlah Pelanggaran: ${violationCountRef.current} / ${session.max_violations || 3}.\nJika mencapai batas maksimal, ujian Anda akan dihentikan secara otomatis.`);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [session, result, sessionId]);
 
   const saveAnswer = async (questionId, choiceId, essayText = '') => {
     setAnswers(prev => ({ ...prev, [questionId]: { selected_choice: choiceId, essay_answer: essayText } }));
@@ -86,52 +144,39 @@ export default function GuestExamSession() {
 
   // Result Screen
   if (result) {
-    const score = parseFloat(result.score) || 0;
-    const passed = score >= (parseFloat(result.passing_score) || 70);
     return (
       <div className="public-layout">
         <div className="public-card" style={{ maxWidth: 480, textAlign: 'center' }}>
           <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>
-            {result.status === 'terminated' ? '🚫' : passed ? '🎉' : '📊'}
+            {result.status === 'terminated' ? '🚫' : '🎉'}
           </div>
           <h2 className="public-title">
             {result.status === 'terminated' ? 'Ujian Dihentikan' : 'Ujian Selesai!'}
           </h2>
 
-          {result.score != null && (
-            <div style={{
-              margin: '1.5rem auto', width: 140, height: 140,
-              borderRadius: '50%', display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              background: passed
-                ? 'linear-gradient(135deg, rgba(34,197,94,0.2), rgba(34,197,94,0.05))'
-                : 'linear-gradient(135deg, rgba(239,68,68,0.2), rgba(239,68,68,0.05))',
-              border: `3px solid ${passed ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}`,
-            }}>
-              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: passed ? '#4ade80' : '#f87171' }}>
-                {score.toFixed(0)}
-              </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>dari 100</div>
-            </div>
-          )}
-
-          <div style={{ marginBottom: '1.5rem' }}>
-            <span className={`badge ${passed ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}>
-              {passed ? '✅ LULUS' : '❌ TIDAK LULUS'}
-            </span>
-          </div>
+          <p style={{ color: 'var(--gray-300)', marginBottom: '1.5rem', fontSize: '0.9rem', lineHeight: '1.5' }}>
+            {result.status === 'terminated'
+              ? 'Ujian Anda telah dihentikan secara otomatis karena Anda melebihi batas maksimal pelanggaran tab switching.'
+              : 'Jawaban Anda telah berhasil dikirim. Nilai Anda akan diperiksa dan dinilai oleh admin atau guru.'}
+          </p>
 
           <div style={{
             padding: '1rem', borderRadius: 'var(--radius-md)',
             background: 'rgba(255,255,255,0.04)', textAlign: 'left',
             fontSize: '0.82rem', display: 'grid', gap: '0.4rem',
+            marginBottom: '1.5rem'
           }}>
             <div className="flex-between"><span style={{ color: 'var(--gray-400)' }}>Ujian</span><span>{result.exam_title}</span></div>
             <div className="flex-between"><span style={{ color: 'var(--gray-400)' }}>Peserta</span><span>{result.participant_name}</span></div>
             <div className="flex-between"><span style={{ color: 'var(--gray-400)' }}>Pelanggaran</span><span>{result.violation_count || 0}</span></div>
+            <div className="flex-between"><span style={{ color: 'var(--gray-400)' }}>Status</span>
+              <span className={`badge ${result.status === 'terminated' ? 'badge-danger' : 'badge-success'}`} style={{ fontSize: '0.75rem' }}>
+                {result.status === 'terminated' ? 'Dihentikan' : 'Selesai'}
+              </span>
+            </div>
           </div>
 
-          <button className="btn btn-primary btn-lg mt-2" style={{ width: '100%' }}
+          <button className="btn btn-primary btn-lg" style={{ width: '100%' }}
             onClick={() => { clearGuest(); navigate('/'); }}>
             Selesai
           </button>
