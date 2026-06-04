@@ -1032,6 +1032,10 @@ class AIGenerateQuestionsView(generics.GenericAPIView):
                     f"]"
                 )
 
+            # Cap max_tokens in the payload to a safe maximum for generation (e.g. 4096)
+            # as most providers do not support output tokens above 4096/8192 and will return HTTP 400.
+            max_tokens_payload = min(settings_obj.max_tokens or 2048, 4096)
+
             payload = {
                 "model": settings_obj.model_name,
                 "messages": [
@@ -1039,7 +1043,7 @@ class AIGenerateQuestionsView(generics.GenericAPIView):
                     {"role": "user", "content": user_prompt}
                 ],
                 "temperature": settings_obj.temperature,
-                "max_tokens": settings_obj.max_tokens
+                "max_tokens": max_tokens_payload
             }
 
             try:
@@ -1069,7 +1073,7 @@ class AIGenerateQuestionsView(generics.GenericAPIView):
             return Response({
                 'error': 'Gagal menghasilkan soal dari AI. AI tidak mengembalikan format JSON yang valid atau semua batch gagal.',
                 'errors': errors
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         # Database Transaction
         from django.db import transaction
