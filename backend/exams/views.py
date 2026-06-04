@@ -1213,7 +1213,7 @@ class AIGradeEssaysView(generics.GenericAPIView):
                     {"role": "user", "content": prompt}
                 ],
                 "temperature": 0.2,
-                "max_tokens": 2000
+                "max_tokens": 4096
             }
 
             try:
@@ -1227,7 +1227,25 @@ class AIGradeEssaysView(generics.GenericAPIView):
                     
                     if resp_json:
                         try:
-                            content = resp_json['choices'][0]['message']['content']
+                            msg = resp_json['choices'][0]['message']
+                            content = msg.get('content', '') or ''
+                            
+                            # Fallback for reasoning models (e.g. mimo-v2.5-pro): content may be empty
+                            if not content.strip():
+                                reasoning = msg.get('reasoning_content', '') or ''
+                                if reasoning.strip():
+                                    import re as _re
+                                    arr_match = _re.search(r'\[.*\]', reasoning, _re.DOTALL)
+                                    if arr_match:
+                                        content = arr_match.group(0)
+                                    else:
+                                        obj_match = _re.search(r'\{.*\}', reasoning, _re.DOTALL)
+                                        if obj_match:
+                                            content = obj_match.group(0)
+                            
+                            if not content.strip():
+                                errors.append("AI mengembalikan jawaban kosong.")
+                                content = None
                         except (KeyError, IndexError) as key_err:
                             errors.append(f"Format respon AI tidak sesuai standard OpenAI: {str(key_err)}. Response: {str(resp_json)[:200]}")
                             content = None
@@ -1367,7 +1385,7 @@ class AIGradeSingleAnswerView(generics.GenericAPIView):
                 {"role": "user", "content": prompt}
             ],
             "temperature": 0.2,
-            "max_tokens": 1000
+            "max_tokens": 4096
         }
 
         try:
@@ -1381,7 +1399,27 @@ class AIGradeSingleAnswerView(generics.GenericAPIView):
                     }, status=status.HTTP_502_BAD_GATEWAY)
                 
                 try:
-                    content = resp_json['choices'][0]['message']['content']
+                    msg = resp_json['choices'][0]['message']
+                    content = msg.get('content', '') or ''
+                    
+                    # Fallback for reasoning models (e.g. mimo-v2.5-pro): content may be empty
+                    if not content.strip():
+                        reasoning = msg.get('reasoning_content', '') or ''
+                        if reasoning.strip():
+                            import re as _re
+                            json_match = _re.search(r'\{[^{}]*"score"\s*:\s*\d+[^{}]*"feedback"\s*:\s*"[^"]*"[^{}]*\}', reasoning, _re.DOTALL)
+                            if json_match:
+                                content = json_match.group(0)
+                            else:
+                                score_match = _re.search(r'"score"\s*:\s*(\d+(?:\.\d+)?)', reasoning)
+                                fb_match = _re.search(r'"feedback"\s*:\s*"([^"]*)"', reasoning)
+                                if score_match:
+                                    sc = score_match.group(1)
+                                    fb = fb_match.group(1) if fb_match else 'Tidak ada feedback.'
+                                    content = json.dumps({"score": float(sc), "feedback": fb})
+                    
+                    if not content.strip():
+                        return Response({'error': 'AI mengembalikan jawaban kosong. Coba ulangi atau gunakan model lain.'}, status=status.HTTP_502_BAD_GATEWAY)
                 except (KeyError, IndexError) as key_err:
                     return Response({
                         'error': f"Format respon AI tidak sesuai standard OpenAI: {str(key_err)}. Response: {str(resp_json)[:200]}"
