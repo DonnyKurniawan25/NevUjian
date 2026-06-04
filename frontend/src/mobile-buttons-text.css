@@ -1,0 +1,119 @@
+/* ===== Show Button Text Labels on Mobile ===== */
+
+/* Override: Always show text labels on action buttons for clarity */
+@media (max-width: 768px) {
+
+    /* Exam Actions - Show text labels */
+    .exam-actions {
+        width: 100%;
+        justify-content: flex-start;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        padding: 0.75rem;
+        background: var(--bg-secondary);
+        border-radius: var(--radius-md);
+    }
+
+    .action-btn {
+        flex: 0 0 auto;
+        padding: 0.65rem 0.95rem !important;
+        min-width: auto !important;
+        justify-content: center;
+        font-size: 0.8rem !important;
+        border-radius: var(--radius-lg) !important;
+        background: var(--bg-card) !important;
+        border: 1px solid var(--border-color) !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+        gap: 0.5rem !important;
+    }
+
+    .action-btn span {
+        display: inline !important;
+        font-weight: 600 !important;
+        color: var(--text-primary) !important;
+    }
+
+    .action-btn svg {
+        width: 16px !important;
+        height: 16px !important;
+        flex-shrink: 0;
+    }
+
+    /* Remove tooltip since we show text */
+    .action-btn::after,
+    .action-btn::before {
+        display: none !important;
+    }
+
+    /* Enhanced active state */
+    .action-btn:active {
+        transform: scale(0.96) !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+        background: var(--primary-50) !important;
+    }
+
+    [data-theme="dark"] .action-btn:active {
+        background: rgba(99, 102, 241, 0.15) !important;
+    }
+
+    /* Danger button styling */
+    .btn-danger.action-btn {
+        background: var(--bg-card) !important;
+        border-color: var(--danger-200) !important;
+    }
+
+    .btn-danger.action-btn span {
+        color: var(--danger-600) !important;
+    }
+
+    .btn-danger.action-btn svg {
+        color: var(--danger-600) !important;
+    }
+
+    .btn-danger.action-btn:active {
+        background: var(--danger-50) !important;
+    }
+
+    [data-theme="dark"] .btn-danger.action-btn:active {
+        background: rgba(239, 68, 68, 0.15) !important;
+    }
+
+    /* Ghost button styling */
+    .btn-ghost.action-btn:hover {
+        background: var(--bg-tertiary) !important;
+    }
+}
+
+/* Small mobile - Compact but still readable */
+@media (max-width: 480px) {
+    .exam-actions {
+        gap: 0.4rem;
+        padding: 0.6rem;
+    }
+
+    .action-btn {
+        padding: 0.55rem 0.75rem !important;
+        font-size: 0.75rem !important;
+    }
+
+    .action-btn svg {
+        width: 15px !important;
+        height: 15px !important;
+    }
+}
+
+/* Very small screens - Stack buttons if needed */
+@media (max-width: 360px) {
+    .exam-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .action-btn {
+        width: 100%;
+        justify-content: flex-start;
+        padding: 0.7rem 1rem !important;
+    }
+}
+
+/* Made with Bob */

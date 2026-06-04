@@ -1674,3 +1674,80 @@ tbody tr:hover {
     padding: 1rem;
   }
 }
+
+/* --- Exam Actions Buttons --- */
+.exam-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.action-btn svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.action-btn span {
+  display: inline;
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.action-btn:active {
+  transform: translateY(0);
+}
+
+/* Mobile: Show only icons, hide text */
+@media (max-width: 768px) {
+  .exam-actions {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 0.4rem;
+  }
+  
+  .action-btn {
+    flex: 0 0 auto;
+    padding: 0.6rem;
+    min-width: 40px;
+    justify-content: center;
+  }
+  
+  .action-btn span {
+    display: none;
+  }
+  
+  .action-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* Tablet: Show text on hover */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .action-btn span {
+    max-width: 0;
+    overflow: hidden;
+    transition: max-width 0.3s ease;
+  }
+  
+  .action-btn:hover span {
+    max-width: 100px;
+  }
+}

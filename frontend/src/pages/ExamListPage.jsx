@@ -82,27 +82,48 @@ export default function ExamListPage() {
                     <span>🔑 {exam.exam_code}</span>
                   </div>
                 </div>
-                <div className="flex" style={{ gap: '0.35rem' }}>
+                <div className="exam-actions">
                   {exam.public_link_enabled && (
-                    <button className="btn btn-ghost btn-icon" title="Salin Link" onClick={() => copyLink(exam.exam_code)}>
-                      <Copy size={15} />
+                    <button
+                      className="btn btn-sm btn-ghost action-btn"
+                      onClick={() => copyLink(exam.exam_code)}
+                      data-label="Salin Link"
+                      title="Salin link ujian ke clipboard">
+                      <Copy size={16} />
+                      <span>Salin Link</span>
                     </button>
                   )}
-                  <button className="btn btn-ghost btn-icon" title="Kelola Soal"
-                    onClick={() => navigate(`/exams/${exam.id}/questions`)}>
-                    <Settings size={15} />
+                  <button
+                    className="btn btn-sm btn-ghost action-btn"
+                    onClick={() => navigate(`/exams/${exam.id}/questions`)}
+                    data-label="Kelola Soal"
+                    title="Kelola soal ujian">
+                    <Settings size={16} />
+                    <span>Kelola Soal</span>
                   </button>
-                  <button className="btn btn-ghost btn-icon" title="Hasil Ujian"
-                    onClick={() => navigate(`/exams/${exam.id}/results`)}>
-                    <BarChart3 size={15} />
+                  <button
+                    className="btn btn-sm btn-ghost action-btn"
+                    onClick={() => navigate(`/exams/${exam.id}/results`)}
+                    data-label="Hasil Ujian"
+                    title="Lihat hasil ujian">
+                    <BarChart3 size={16} />
+                    <span>Hasil</span>
                   </button>
-                  <button className="btn btn-ghost btn-icon" title="Edit"
-                    onClick={() => navigate(`/exams/${exam.id}/edit`)}>
-                    <FileText size={15} />
+                  <button
+                    className="btn btn-sm btn-ghost action-btn"
+                    onClick={() => navigate(`/exams/${exam.id}/edit`)}
+                    data-label="Edit Ujian"
+                    title="Edit ujian">
+                    <FileText size={16} />
+                    <span>Edit</span>
                   </button>
-                  <button className="btn btn-ghost btn-icon" title="Hapus" style={{ color: 'var(--danger-500)' }}
-                    onClick={() => handleDelete(exam.id)}>
-                    <Trash2 size={15} />
+                  <button
+                    className="btn btn-sm btn-danger action-btn"
+                    onClick={() => handleDelete(exam.id)}
+                    data-label="Hapus Ujian"
+                    title="Hapus ujian">
+                    <Trash2 size={16} />
+                    <span>Hapus</span>
                   </button>
                 </div>
               </div>

@@ -581,3 +581,69 @@
 }
 
 /* Made with Bob */
+
+/* --- Enhanced Action Buttons for Mobile --- */
+@media (max-width: 768px) {
+
+    /* Tooltip untuk action buttons di mobile */
+    .action-btn {
+        position: relative;
+    }
+
+    .action-btn::after {
+        content: attr(data-label);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%) translateY(-8px);
+        background: var(--gray-900);
+        color: white;
+        padding: 0.4rem 0.6rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.7rem;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: all var(--transition-fast);
+        z-index: 1000;
+    }
+
+    [data-theme="dark"] .action-btn::after {
+        background: var(--gray-100);
+        color: var(--gray-900);
+    }
+
+    .action-btn::before {
+        content: '';
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%) translateY(-2px);
+        border: 4px solid transparent;
+        border-top-color: var(--gray-900);
+        opacity: 0;
+        pointer-events: none;
+        transition: all var(--transition-fast);
+        z-index: 1000;
+    }
+
+    [data-theme="dark"] .action-btn::before {
+        border-top-color: var(--gray-100);
+    }
+
+    .action-btn:active::after,
+    .action-btn:active::before {
+        opacity: 1;
+        transform: translateX(-50%) translateY(-4px);
+    }
+
+    /* Better visual feedback */
+    .action-btn:active {
+        transform: scale(0.95);
+        background: var(--bg-tertiary);
+    }
+
+    .btn-danger.action-btn:active {
+        background: rgba(239, 68, 68, 0.1);
+    }
+}
