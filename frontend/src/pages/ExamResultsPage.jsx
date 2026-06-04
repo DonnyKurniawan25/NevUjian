@@ -22,6 +22,7 @@ export default function ExamResultsPage() {
 
   // Grading states
   const [gradingAI, setGradingAI] = useState(false);
+  const [gradingSingleAI, setGradingSingleAI] = useState({});
   const [editingAnswerId, setEditingAnswerId] = useState(null);
   const [editPoints, setEditPoints] = useState('');
   const [editFeedback, setEditFeedback] = useState('');
@@ -97,6 +98,24 @@ export default function ExamResultsPage() {
       toast.error(err.response?.data?.error || 'Gagal melakukan penilaian essay AI.');
     } finally {
       setGradingAI(false);
+    }
+  };
+
+  const handleGradeSingleEssayAI = async (answerId) => {
+    try {
+      setGradingSingleAI(prev => ({ ...prev, [answerId]: true }));
+      const res = await examApi.gradeSingleEssayAI(answerId);
+      if (res.data.success) {
+        toast.success('Jawaban essay berhasil dinilai oleh AI.');
+      } else {
+        toast.error('AI gagal menilai jawaban.');
+      }
+      loadSessionDetail(sheetSessionId);
+      loadResults();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Gagal melakukan penilaian essay AI.');
+    } finally {
+      setGradingSingleAI(prev => ({ ...prev, [answerId]: false }));
     }
   };
 
@@ -525,14 +544,30 @@ export default function ExamResultsPage() {
                                 {ptsEarned} / {ptsMax}
                               </span>
                               {isEssay && !isEditing && (
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  onClick={() => startEditAnswer(ans)}
-                                  title="Periksa Manual"
-                                  style={{ padding: '0.2rem 0.4rem', fontSize: '0.72rem' }}
-                                >
-                                  <PenLine size={13} /> Periksa
-                                </button>
+                                <div style={{ display: 'flex', gap: '0.3rem' }}>
+                                  <button
+                                    className="btn btn-ai btn-sm"
+                                    onClick={() => handleGradeSingleEssayAI(ans.id)}
+                                    disabled={gradingSingleAI[ans.id]}
+                                    title="Koreksi dengan AI"
+                                    style={{ padding: '0.2rem 0.4rem', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                                  >
+                                    {gradingSingleAI[ans.id] ? (
+                                      <div className="spinner" style={{ width: 11, height: 11, borderWidth: 1.5 }} />
+                                    ) : (
+                                      <Sparkles size={13} />
+                                    )}
+                                    <span>AI</span>
+                                  </button>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => startEditAnswer(ans)}
+                                    title="Periksa Manual"
+                                    style={{ padding: '0.2rem 0.4rem', fontSize: '0.72rem' }}
+                                  >
+                                    <PenLine size={13} /> Periksa
+                                  </button>
+                                </div>
                               )}
                             </div>
                           </div>

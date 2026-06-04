@@ -64,6 +64,7 @@ export const examApi = {
   testAIConnection: (data) => api.post('/ai/settings/test-connection/', data),
   generateQuestionsAI: (examId, data) => api.post(`/exams/${examId}/ai-generate-questions/`, data),
   gradeEssaysAI: (sessionId) => api.post(`/student/exam-sessions/${sessionId}/grade-essays/`),
+  gradeSingleEssayAI: (answerId) => api.post(`/exams/answers/${answerId}/ai-grade/`),
 
   // Session management (teacher)
   deleteSession: (sessionId) => api.delete(`/exams/sessions/${sessionId}/`),

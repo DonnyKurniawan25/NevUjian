@@ -1136,7 +1136,7 @@ class AIGenerateQuestionsView(generics.GenericAPIView):
 
 
 class AIGradeEssaysView(generics.GenericAPIView):
-    """Grade essay answers automatically using AI for a given exam session."""
+    """Grade essay answers automatically using AI for a given exam session in a single batch request."""
     permission_classes = [IsAdminOrTeacher]
 
     def post(self, request, session_id):
@@ -1165,10 +1165,11 @@ class AIGradeEssaysView(generics.GenericAPIView):
 
         graded_count = 0
         errors = []
+        prompt_data = []
 
+        # Separate blank answers and construct batch payload for non-blank ones
         for answer in essay_answers:
             q = answer.question
-            max_points = q.points
             student_text = answer.essay_answer.strip()
 
             if not student_text:
@@ -1179,28 +1180,40 @@ class AIGradeEssaysView(generics.GenericAPIView):
                 graded_count += 1
                 continue
 
+            prompt_data.append({
+                "id": answer.id,
+                "question": q.question_text,
+                "key": q.explanation,
+                "student_answer": student_text,
+                "max_points": float(q.points)
+            })
+
+        if prompt_data:
             prompt = (
-                f"Pertanyaan: {q.question_text}\n"
-                f"Kunci Jawaban / Kriteria Penilaian: {q.explanation}\n"
-                f"Jawaban Siswa: {student_text}\n"
-                f"Poin Maksimal: {max_points}\n\n"
-                f"Evaluasi jawaban siswa secara adil.\n"
-                f"Kembalikan response dalam JSON dengan key 'score' (angka antara 0-{max_points}) dan 'feedback' (string masukan singkat).\n"
-                f"Contoh:\n"
-                f"{{\n"
-                f"  \"score\": 7.5,\n"
-                f"  \"feedback\": \"Penjelasan sudah baik, tetapi kurang menyebutkan aspek Y.\"\n"
-                f"}}"
+                f"Evaluasi semua jawaban essay siswa berikut berdasarkan kunci jawaban dan kriteria penilaian. "
+                f"Untuk setiap jawaban, berikan nilai ('score') antara 0 hingga 'max_points' dan berikan masukan singkat ('feedback') dalam Bahasa Indonesia.\n"
+                f"Format output harus berupa JSON array of objects dengan key: 'id' (integer), 'score' (number), dan 'feedback' (string).\n"
+                f"Kembalikan HANYA format JSON murni tanpa markdown, penjelasan atau pembungkus lain.\n\n"
+                f"Daftar Jawaban:\n"
+                f"{json.dumps(prompt_data, ensure_ascii=False, indent=2)}\n\n"
+                f"Contoh Response:\n"
+                f"[\n"
+                f"  {{\n"
+                f"    \"id\": {prompt_data[0]['id']},\n"
+                f"    \"score\": 7.5,\n"
+                f"    \"feedback\": \"Penjelasan sudah baik, tetapi kurang detail pada bagian X.\"\n"
+                f"  }}\n"
+                f"]"
             )
 
             payload = {
                 "model": settings_obj.model_name,
                 "messages": [
-                    {"role": "system", "content": "Anda adalah asisten koreksi ujian otomatis yang objektif dan mengembalikan format JSON murni."},
+                    {"role": "system", "content": "Anda adalah asisten koreksi ujian otomatis yang objektif dan mengembalikan format JSON array murni."},
                     {"role": "user", "content": prompt}
                 ],
                 "temperature": 0.2,
-                "max_tokens": 1000
+                "max_tokens": 2000
             }
 
             try:
@@ -1208,26 +1221,57 @@ class AIGradeEssaysView(generics.GenericAPIView):
                 if response.status_code == 200:
                     resp_json = response.json()
                     content = resp_json['choices'][0]['message']['content']
-                    ai_result = clean_and_parse_json(content)
+                    ai_results = clean_and_parse_json(content)
                     
-                    score_val = ai_result.get('score', 0)
-                    score = Decimal(str(score_val))
-                    if score < 0:
-                        score = Decimal('0')
-                    elif score > max_points:
-                        score = Decimal(str(max_points))
-                        
-                    feedback = ai_result.get('feedback', '')
-                    
-                    answer.points_earned = score
-                    answer.is_correct = score >= (Decimal(str(max_points)) / 2)
-                    answer.ai_feedback = feedback
-                    answer.save()
-                    graded_count += 1
+                    # Parse results mapping
+                    results_map = {}
+                    if isinstance(ai_results, list):
+                        for item in ai_results:
+                            if isinstance(item, dict) and 'id' in item:
+                                results_map[item.get('id')] = item
+                    elif isinstance(ai_results, dict):
+                        # Handle potential wrapping or object mapping
+                        for key, val in ai_results.items():
+                            if isinstance(val, dict):
+                                try:
+                                    results_map[int(key)] = val
+                                except ValueError:
+                                    pass
+                            elif key in ['grades', 'results', 'answers', 'data'] and isinstance(val, list):
+                                for item in val:
+                                    if isinstance(item, dict) and 'id' in item:
+                                        results_map[item.get('id')] = item
+                                break
+
+                    # Apply grades to database
+                    for answer in essay_answers:
+                        if answer.id in results_map:
+                            item = results_map[answer.id]
+                            score_val = item.get('score', 0)
+                            feedback = item.get('feedback', '')
+                            
+                            try:
+                                score = Decimal(str(score_val))
+                            except Exception:
+                                score = Decimal('0.00')
+                                
+                            max_points = answer.question.points
+                            if score < 0:
+                                score = Decimal('0.00')
+                            elif score > max_points:
+                                score = Decimal(str(max_points))
+                                
+                            answer.points_earned = score
+                            answer.is_correct = score >= (Decimal(str(max_points)) / 2)
+                            answer.ai_feedback = feedback
+                            answer.save()
+                            graded_count += 1
+                        elif answer.essay_answer.strip():
+                            errors.append(f"Jawaban ID {answer.id} (soal {answer.question.order}) tidak ada dalam respon grading AI.")
                 else:
-                    errors.append(f"Soal {q.order}: AI Provider returned HTTP {response.status_code}")
+                    errors.append(f"AI Provider returned HTTP {response.status_code}: {response.text}")
             except Exception as e:
-                errors.append(f"Soal {q.order}: {str(e)}")
+                errors.append(f"Gagal menghubungi AI atau parsing data: {str(e)}")
 
         # Recalculate session score
         session.score = calculate_score(session)
@@ -1239,6 +1283,113 @@ class AIGradeEssaysView(generics.GenericAPIView):
             'errors': errors,
             'new_score': session.score
         })
+
+
+class AIGradeSingleAnswerView(generics.GenericAPIView):
+    """Grade a single essay answer using AI."""
+    permission_classes = [IsAdminOrTeacher]
+
+    def post(self, request, answer_id):
+        answer = generics.get_object_or_404(StudentAnswer, pk=answer_id)
+        if answer.question.question_type != 'essay':
+            return Response({'error': 'Jawaban ini bukan merupakan tipe soal essay.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        settings_obj = AISetting.objects.filter(pk=1).first()
+        if not settings_obj or not settings_obj.is_active:
+            return Response({'error': 'Integrasi AI dinonaktifkan atau belum dikonfigurasi.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not settings_obj.api_key:
+            return Response({'error': 'API Key AI belum diatur.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        q = answer.question
+        max_points = q.points
+        student_text = answer.essay_answer.strip()
+
+        if not student_text:
+            answer.points_earned = Decimal('0.00')
+            answer.is_correct = False
+            answer.ai_feedback = "Siswa tidak memberikan jawaban."
+            answer.save()
+            
+            # Recalculate session score
+            session = answer.session
+            session.score = calculate_score(session)
+            session.save()
+            
+            return Response({
+                'success': True,
+                'score': 0,
+                'feedback': answer.ai_feedback,
+                'new_session_score': session.score
+            })
+
+        base_url = settings_obj.base_url.rstrip('/')
+        url = f"{base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {settings_obj.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        prompt = (
+            f"Pertanyaan: {q.question_text}\n"
+            f"Kunci Jawaban / Kriteria Penilaian: {q.explanation}\n"
+            f"Jawaban Siswa: {student_text}\n"
+            f"Poin Maksimal: {max_points}\n\n"
+            f"Evaluasi jawaban siswa secara adil.\n"
+            f"Kembalikan response dalam JSON dengan key 'score' (angka antara 0-{max_points}) dan 'feedback' (string masukan singkat dalam Bahasa Indonesia).\n"
+            f"Contoh:\n"
+            f"{{\n"
+            f"  \"score\": 7.5,\n"
+            f"  \"feedback\": \"Penjelasan sudah baik, tetapi kurang menyebutkan aspek Y.\"\n"
+            f"}}"
+        )
+
+        payload = {
+            "model": settings_obj.model_name,
+            "messages": [
+                {"role": "system", "content": "Anda adalah asisten koreksi ujian otomatis yang objektif dan mengembalikan format JSON murni."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.2,
+            "max_tokens": 1000
+        }
+
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=settings_obj.timeout)
+            if response.status_code == 200:
+                resp_json = response.json()
+                content = resp_json['choices'][0]['message']['content']
+                ai_result = clean_and_parse_json(content)
+                
+                score_val = ai_result.get('score', 0)
+                score = Decimal(str(score_val))
+                if score < 0:
+                    score = Decimal('0')
+                elif score > max_points:
+                    score = Decimal(str(max_points))
+                    
+                feedback = ai_result.get('feedback', '')
+                
+                answer.points_earned = score
+                answer.is_correct = score >= (Decimal(str(max_points)) / 2)
+                answer.ai_feedback = feedback
+                answer.save()
+                
+                # Recalculate session score
+                session = answer.session
+                session.score = calculate_score(session)
+                session.save()
+                
+                return Response({
+                    'success': True,
+                    'score': float(score),
+                    'feedback': feedback,
+                    'new_session_score': session.score
+                })
+            else:
+                return Response({'error': f"AI Provider returned HTTP {response.status_code}: {response.text}"}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as e:
+            return Response({'error': f"Gagal menghubungi AI: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 class TeacherExamSessionDetailView(generics.RetrieveDestroyAPIView):

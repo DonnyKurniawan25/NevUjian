@@ -9,6 +9,7 @@ from .views import (
     MyExamSessionsView,
     AISettingView, AITestConnectionView,
     AIGenerateQuestionsView, AIGradeEssaysView,
+    AIGradeSingleAnswerView,
     TeacherExamSessionDetailView, ManualGradeAnswerView,
     ExportSessionPDFView, ExportSessionDocxView,
     ExportQuestionsDocxView,
@@ -25,6 +26,7 @@ urlpatterns = [
     path('exams/sessions/<uuid:session_id>/export-pdf/', ExportSessionPDFView.as_view(), name='export-session-pdf'),
     path('exams/sessions/<uuid:session_id>/export-docx/', ExportSessionDocxView.as_view(), name='export-session-docx'),
     path('exams/answers/<int:answer_id>/grade/', ManualGradeAnswerView.as_view(), name='manual-grade-answer'),
+    path('exams/answers/<int:answer_id>/ai-grade/', AIGradeSingleAnswerView.as_view(), name='ai-grade-single-answer'),
 
     # AI Integration Settings & Helpers
     path('ai/settings/', AISettingView.as_view(), name='ai-settings'),
