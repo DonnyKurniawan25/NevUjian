@@ -1219,57 +1219,74 @@ class AIGradeEssaysView(generics.GenericAPIView):
             try:
                 response = requests.post(url, json=payload, headers=headers, timeout=settings_obj.timeout)
                 if response.status_code == 200:
-                    resp_json = response.json()
-                    content = resp_json['choices'][0]['message']['content']
-                    ai_results = clean_and_parse_json(content)
+                    try:
+                        resp_json = response.json()
+                    except Exception as json_err:
+                        errors.append(f"Gagal membaca JSON dari provider AI (Status 200 OK): {str(json_err)}. Response mentah: {response.text[:200]}")
+                        resp_json = None
                     
-                    # Parse results mapping
-                    results_map = {}
-                    if isinstance(ai_results, list):
-                        for item in ai_results:
-                            if isinstance(item, dict) and 'id' in item:
-                                results_map[item.get('id')] = item
-                    elif isinstance(ai_results, dict):
-                        # Handle potential wrapping or object mapping
-                        for key, val in ai_results.items():
-                            if isinstance(val, dict):
-                                try:
-                                    results_map[int(key)] = val
-                                except ValueError:
-                                    pass
-                            elif key in ['grades', 'results', 'answers', 'data'] and isinstance(val, list):
-                                for item in val:
-                                    if isinstance(item, dict) and 'id' in item:
-                                        results_map[item.get('id')] = item
-                                break
-
-                    # Apply grades to database
-                    for answer in essay_answers:
-                        if answer.id in results_map:
-                            item = results_map[answer.id]
-                            score_val = item.get('score', 0)
-                            feedback = item.get('feedback', '')
-                            
+                    if resp_json:
+                        try:
+                            content = resp_json['choices'][0]['message']['content']
+                        except (KeyError, IndexError) as key_err:
+                            errors.append(f"Format respon AI tidak sesuai standard OpenAI: {str(key_err)}. Response: {str(resp_json)[:200]}")
+                            content = None
+                        
+                        if content:
                             try:
-                                score = Decimal(str(score_val))
-                            except Exception:
-                                score = Decimal('0.00')
-                                
-                            max_points = answer.question.points
-                            if score < 0:
-                                score = Decimal('0.00')
-                            elif score > max_points:
-                                score = Decimal(str(max_points))
-                                
-                            answer.points_earned = score
-                            answer.is_correct = score >= (Decimal(str(max_points)) / 2)
-                            answer.ai_feedback = feedback
-                            answer.save()
-                            graded_count += 1
-                        elif answer.essay_answer.strip():
-                            errors.append(f"Jawaban ID {answer.id} (soal {answer.question.order}) tidak ada dalam respon grading AI.")
+                                ai_results = clean_and_parse_json(content)
+                            except json.JSONDecodeError as parse_err:
+                                errors.append(f"Gagal mengurai hasil AI sebagai JSON: {str(parse_err)}. Teks dari AI: {content[:200]}")
+                                ai_results = None
+                            
+                            if ai_results:
+                                # Parse results mapping
+                                results_map = {}
+                                if isinstance(ai_results, list):
+                                    for item in ai_results:
+                                        if isinstance(item, dict) and 'id' in item:
+                                            results_map[item.get('id')] = item
+                                elif isinstance(ai_results, dict):
+                                    # Handle potential wrapping or object mapping
+                                    for key, val in ai_results.items():
+                                        if isinstance(val, dict):
+                                            try:
+                                                results_map[int(key)] = val
+                                            except ValueError:
+                                                pass
+                                        elif key in ['grades', 'results', 'answers', 'data'] and isinstance(val, list):
+                                            for item in val:
+                                                if isinstance(item, dict) and 'id' in item:
+                                                    results_map[item.get('id')] = item
+                                            break
+
+                                # Apply grades to database
+                                for answer in essay_answers:
+                                    if answer.id in results_map:
+                                        item = results_map[answer.id]
+                                        score_val = item.get('score', 0)
+                                        feedback = item.get('feedback', '')
+                                        
+                                        try:
+                                            score = Decimal(str(score_val))
+                                        except Exception:
+                                            score = Decimal('0.00')
+                                            
+                                        max_points = answer.question.points
+                                        if score < 0:
+                                            score = Decimal('0.00')
+                                        elif score > max_points:
+                                            score = Decimal(str(max_points))
+                                            
+                                        answer.points_earned = score
+                                        answer.is_correct = score >= (Decimal(str(max_points)) / 2)
+                                        answer.ai_feedback = feedback
+                                        answer.save()
+                                        graded_count += 1
+                                    elif answer.essay_answer.strip():
+                                        errors.append(f"Jawaban ID {answer.id} (soal {answer.question.order}) tidak ada dalam respon grading AI.")
                 else:
-                    errors.append(f"AI Provider returned HTTP {response.status_code}: {response.text}")
+                    errors.append(f"AI Provider returned HTTP {response.status_code}: {response.text[:200]}")
             except Exception as e:
                 errors.append(f"Gagal menghubungi AI atau parsing data: {str(e)}")
 
@@ -1356,9 +1373,26 @@ class AIGradeSingleAnswerView(generics.GenericAPIView):
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=settings_obj.timeout)
             if response.status_code == 200:
-                resp_json = response.json()
-                content = resp_json['choices'][0]['message']['content']
-                ai_result = clean_and_parse_json(content)
+                try:
+                    resp_json = response.json()
+                except Exception as json_err:
+                    return Response({
+                        'error': f"Gagal membaca JSON dari provider AI (Status 200 OK): {str(json_err)}. Response mentah: {response.text[:200]}"
+                    }, status=status.HTTP_502_BAD_GATEWAY)
+                
+                try:
+                    content = resp_json['choices'][0]['message']['content']
+                except (KeyError, IndexError) as key_err:
+                    return Response({
+                        'error': f"Format respon AI tidak sesuai standard OpenAI: {str(key_err)}. Response: {str(resp_json)[:200]}"
+                    }, status=status.HTTP_502_BAD_GATEWAY)
+                
+                try:
+                    ai_result = clean_and_parse_json(content)
+                except json.JSONDecodeError as parse_err:
+                    return Response({
+                        'error': f"Gagal mengurai hasil AI sebagai JSON: {str(parse_err)}. Teks dari AI: {content[:200]}"
+                    }, status=status.HTTP_502_BAD_GATEWAY)
                 
                 score_val = ai_result.get('score', 0)
                 score = Decimal(str(score_val))
@@ -1386,7 +1420,7 @@ class AIGradeSingleAnswerView(generics.GenericAPIView):
                     'new_session_score': session.score
                 })
             else:
-                return Response({'error': f"AI Provider returned HTTP {response.status_code}: {response.text}"}, status=status.HTTP_502_BAD_GATEWAY)
+                return Response({'error': f"AI Provider returned HTTP {response.status_code}: {response.text[:200]}"}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception as e:
             return Response({'error': f"Gagal menghubungi AI: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
