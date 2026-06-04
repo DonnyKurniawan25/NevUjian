@@ -157,7 +157,7 @@ export default function AISettingsPage() {
   return (
     <div className="slide-up">
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
           
           {/* Left Column: Form */}
           <div className="card">
@@ -266,7 +266,7 @@ export default function AISettingsPage() {
                   />
                   <p className="form-hint">Nilai rendah (0.2) lebih fokus/kaku. Tinggi (0.8) lebih kreatif.</p>
                 </div>
-                <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Max Tokens</label>
                     <input

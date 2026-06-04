@@ -1721,18 +1721,18 @@ tbody tr:hover {
     justify-content: flex-start;
     gap: 0.4rem;
   }
-  
+
   .action-btn {
     flex: 0 0 auto;
     padding: 0.6rem;
     min-width: 40px;
     justify-content: center;
   }
-  
+
   .action-btn span {
     display: none;
   }
-  
+
   .action-btn svg {
     width: 18px;
     height: 18px;
@@ -1746,8 +1746,215 @@ tbody tr:hover {
     overflow: hidden;
     transition: max-width 0.3s ease;
   }
-  
+
   .action-btn:hover span {
     max-width: 100px;
   }
+}
+
+/* --- Modal Styles --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-content {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+}
+
+.modal-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  padding: 1.5rem;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+  .modal-content {
+    max-width: 100%;
+    max-height: 95vh;
+    border-radius: var(--radius-lg);
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: 1rem;
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .modal-footer .btn {
+    width: 100%;
+  }
+}
+
+/* --- New Layout Classes --- */
+.modal-lg {
+  max-width: 900px;
+  width: 96%;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.exam-sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+
+.questions-layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.exam-session-grid {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 1rem;
+  padding: 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.exam-card-title-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.3rem;
+}
+
+.grading-form-grid {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.user-search-row {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+  max-width: 600px;
+}
+
+/* --- Exam Sheet Modal Elements --- */
+.exam-sheet-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.06));
+  border: 2px solid var(--primary-200);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.sheet-stat-box {
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  text-align: center;
+  border: 1px solid var(--border-color);
+}
+
+.sheet-stat-box .label {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sheet-stat-box .value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-top: 0.15rem;
+}
+
+.sheet-stat-box.success {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));
+  border: 2px solid var(--success-300) !important;
+}
+
+.sheet-stat-box.success .value {
+  font-size: 1.5rem;
+  font-weight: 900;
+  margin-top: 0.1rem;
+  color: var(--success-600);
+}
+
+.sheet-stat-box.danger {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
+  border: 2px solid var(--danger-300) !important;
+}
+
+.sheet-stat-box.danger .value {
+  font-size: 1.5rem;
+  font-weight: 900;
+  margin-top: 0.1rem;
+  color: var(--danger-500);
+}
+
+.btn-ai {
+  background: linear-gradient(135deg, #7c3aed, #6366f1) !important;
+  color: #fff !important;
+  font-size: 0.75rem !important;
+  padding: 0.35rem 0.6rem !important;
+  display: flex !important;
+  align-items: center;
+  gap: 0.3rem;
+  border: none !important;
+}
+
+.btn-ai:hover {
+  opacity: 0.9;
+}
+
+.grading-box {
+  padding: 0.85rem;
+  background: rgba(245, 158, 11, 0.06);
+  border: 2px solid var(--warning-300);
+  border-radius: var(--radius-md);
 }

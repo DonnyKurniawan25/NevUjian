@@ -9,7 +9,9 @@ from .views import (
     MyExamSessionsView,
     AISettingView, AITestConnectionView,
     AIGenerateQuestionsView, AIGradeEssaysView,
-    TeacherExamSessionDetailView,
+    TeacherExamSessionDetailView, ManualGradeAnswerView,
+    ExportSessionPDFView, ExportSessionDocxView,
+    ExportQuestionsDocxView,
 )
 
 router = DefaultRouter()
@@ -18,8 +20,11 @@ router.register(r'exams', ExamViewSet, basename='exams')
 urlpatterns = [
     path('', include(router.urls)),
 
-    # Teacher session detail
+    # Teacher session detail & manual grading
     path('exams/sessions/<uuid:session_id>/', TeacherExamSessionDetailView.as_view(), name='teacher-exam-session-detail'),
+    path('exams/sessions/<uuid:session_id>/export-pdf/', ExportSessionPDFView.as_view(), name='export-session-pdf'),
+    path('exams/sessions/<uuid:session_id>/export-docx/', ExportSessionDocxView.as_view(), name='export-session-docx'),
+    path('exams/answers/<int:answer_id>/grade/', ManualGradeAnswerView.as_view(), name='manual-grade-answer'),
 
     # AI Integration Settings & Helpers
     path('ai/settings/', AISettingView.as_view(), name='ai-settings'),
@@ -46,6 +51,9 @@ urlpatterns = [
     path('exams/<int:exam_id>/questions/download-template/',
          QuestionViewSet.as_view({'get': 'download_template'}),
          name='exam-questions-download-template'),
+    path('exams/<int:exam_id>/questions/export-word/',
+         ExportQuestionsDocxView.as_view(),
+         name='exam-questions-export-word'),
 
     # Export
     path('exams/<int:exam_id>/export/excel/',

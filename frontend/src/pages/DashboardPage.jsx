@@ -73,8 +73,8 @@ export default function DashboardPage() {
                 <thead>
                   <tr>
                     <th>Judul</th>
-                    <th>Mata Pelajaran</th>
-                    <th>Mode Akses</th>
+                    <th className="hide-mobile">Mata Pelajaran</th>
+                    <th className="hide-mobile">Mode Akses</th>
                     <th>Status</th>
                     <th>Peserta</th>
                   </tr>
@@ -84,8 +84,8 @@ export default function DashboardPage() {
                     <tr key={exam.id} style={{ cursor: 'pointer' }}
                       onClick={() => navigate(`/exams/${exam.id}/results`)}>
                       <td style={{ fontWeight: 600 }}>{exam.title}</td>
-                      <td>{exam.subject}</td>
-                      <td>
+                      <td className="hide-mobile">{exam.subject}</td>
+                      <td className="hide-mobile">
                         <span className={`badge ${exam.access_mode === 'login_required' ? 'badge-primary' : exam.access_mode === 'guest_allowed' ? 'badge-success' : 'badge-warning'}`}>
                           {exam.access_mode === 'login_required' ? 'Login' : exam.access_mode === 'guest_allowed' ? 'Guest' : 'Keduanya'}
                         </span>

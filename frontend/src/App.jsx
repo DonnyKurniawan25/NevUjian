@@ -16,6 +16,7 @@ import ExamFormPage from './pages/ExamFormPage';
 import ExamQuestionsPage from './pages/ExamQuestionsPage';
 import ExamResultsPage from './pages/ExamResultsPage';
 import AISettingsPage from './pages/AISettingsPage';
+import UserManagementPage from './pages/UserManagementPage';
 
 // Student Pages
 import StudentDashboard from './pages/StudentDashboard';
@@ -85,6 +86,11 @@ function AppRoutes() {
       <Route path="/settings/ai" element={
         <ProtectedRoute roles={['admin', 'teacher']}>
           <DashboardLayout><AISettingsPage /></DashboardLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/users" element={
+        <ProtectedRoute roles={['admin']}>
+          <DashboardLayout><UserManagementPage /></DashboardLayout>
         </ProtectedRoute>
       } />
 

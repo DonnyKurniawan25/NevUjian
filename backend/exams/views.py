@@ -686,9 +686,10 @@ class ExportExcelView(generics.GenericAPIView):
                 cell.alignment = Alignment(horizontal='center')
 
         # Auto-width
+        from openpyxl.utils import get_column_letter
         for col in ws.columns:
             max_length = 0
-            column_letter = col[0].column_letter
+            column_letter = get_column_letter(col[0].column)
             for cell in col:
                 if cell.value:
                     max_length = max(max_length, len(str(cell.value)))
@@ -1215,11 +1216,1077 @@ class AIGradeEssaysView(generics.GenericAPIView):
         })
 
 
-class TeacherExamSessionDetailView(generics.RetrieveAPIView):
-    """Retrieve detailed session answers for teachers/admins."""
+class TeacherExamSessionDetailView(generics.RetrieveDestroyAPIView):
+    """Retrieve or delete detailed session answers for teachers/admins."""
     serializer_class = ExamSessionSerializer
     permission_classes = [IsAdminOrTeacher]
     queryset = ExamSession.objects.all()
     lookup_field = 'id'
     lookup_url_kwarg = 'session_id'
+
+    def destroy(self, request, *args, **kwargs):
+        session = self.get_object()
+        # Also clean up orphan GuestParticipant if exists
+        guest = session.guest_participant
+        session.delete()
+        if guest and not guest.exam_sessions.exists():
+            guest.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ManualGradeAnswerView(generics.GenericAPIView):
+    """Manually grade a single student answer (essay)."""
+    permission_classes = [IsAdminOrTeacher]
+
+    def patch(self, request, answer_id):
+        answer = generics.get_object_or_404(StudentAnswer, pk=answer_id)
+
+        points = request.data.get('points_earned')
+        feedback = request.data.get('feedback', '')
+
+        if points is None:
+            return Response({'error': 'points_earned wajib diisi.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            score = Decimal(str(points))
+        except Exception:
+            return Response({'error': 'Nilai poin tidak valid.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        max_points = answer.question.points
+        if score < 0:
+            score = Decimal('0')
+        elif score > max_points:
+            score = Decimal(str(max_points))
+
+        answer.points_earned = score
+        answer.is_correct = score >= (Decimal(str(max_points)) / 2)
+        if feedback:
+            answer.ai_feedback = f"[Manual] {feedback}"
+        answer.save()
+
+        # Recalculate session score
+        session = answer.session
+        session.score = calculate_score(session)
+        session.save(update_fields=['score'])
+
+        return Response({
+            'id': answer.id,
+            'points_earned': str(answer.points_earned),
+            'is_correct': answer.is_correct,
+            'ai_feedback': answer.ai_feedback,
+            'new_session_score': str(session.score),
+        })
+
+
+class ExportSessionPDFView(generics.GenericAPIView):
+    """Export an individual student's exam sheet/result to PDF."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, session_id):
+        from xhtml2pdf import pisa
+
+        session = generics.get_object_or_404(ExamSession, pk=session_id)
+
+        # Access check
+        is_guest_allowed = False
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        if auth_header.startswith('Guest '):
+            token = auth_header[6:]
+            try:
+                guest = GuestParticipant.objects.get(access_token=token)
+                if guest.is_token_valid and session.guest_participant == guest:
+                    is_guest_allowed = True
+            except GuestParticipant.DoesNotExist:
+                pass
+
+        is_user_allowed = False
+        if request.user and request.user.is_authenticated:
+            if request.user.role in ('admin', 'teacher') or session.student == request.user:
+                is_user_allowed = True
+
+        if not is_guest_allowed and not is_user_allowed:
+            return Response({'error': 'Anda tidak memiliki akses ke lembar ujian ini.'}, status=status.HTTP_403_FORBIDDEN)
+
+        exam = session.exam
+        questions = exam.questions.all().order_by('order')
+        answers = {ans.question_id: ans for ans in session.answers.all().select_related('selected_choice')}
+
+        # Formatting date and time
+        hari_tanggal = '-'
+        waktu = '-'
+        if session.started_at:
+            local_started_at = timezone.localtime(session.started_at)
+            hari_tanggal = local_started_at.strftime('%A, %d %B %Y')
+            waktu = local_started_at.strftime('%H:%M')
+            
+            day_translations = {
+                'Monday': 'Senin', 'Tuesday': 'Selasa', 'Wednesday': 'Rabu',
+                'Thursday': 'Kamis', 'Friday': 'Jumat', 'Saturday': 'Sabtu', 'Sunday': 'Minggu'
+            }
+            month_translations = {
+                'January': 'Januari', 'February': 'Februari', 'March': 'Maret', 'April': 'April',
+                'May': 'Mei', 'June': 'Juni', 'July': 'Juli', 'August': 'Agustus',
+                'September': 'September', 'October': 'Oktober', 'November': 'November', 'December': 'Desember'
+            }
+            for eng, ind in day_translations.items():
+                hari_tanggal = hari_tanggal.replace(eng, ind)
+            for eng, ind in month_translations.items():
+                hari_tanggal = hari_tanggal.replace(eng, ind)
+
+            if session.submitted_at:
+                local_submitted_at = timezone.localtime(session.submitted_at)
+                waktu += f' - {local_submitted_at.strftime("%H:%M")}'
+            else:
+                waktu += ' - Selesai'
+
+        nis = '-'
+        kelas = '-'
+        if session.student:
+            profile = getattr(session.student, 'student_profile', None)
+            if profile:
+                nis = profile.nis
+                kelas = profile.class_name
+        elif session.guest_participant:
+            nis = session.guest_participant.nis
+            kelas = session.guest_participant.class_name
+
+        total_earned = sum(float(ans.points_earned) for ans in answers.values())
+        total_max = sum(q.points for q in questions)
+
+        q_html = ''
+        for idx, q in enumerate(questions, 1):
+            ans = answers.get(q.id)
+            points_earned = float(ans.points_earned) if ans else 0.0
+            max_points = q.points
+            
+            if q.question_type == 'multiple_choice':
+                choices = q.choices.all().order_by('order')
+                choices_html = ''
+                for c_idx, choice in enumerate(choices):
+                    char = chr(65 + c_idx)
+                    is_selected = ans and ans.selected_choice_id == choice.id
+                    is_correct = choice.is_correct
+                    
+                    choice_style = ""
+                    choice_label = ""
+                    if is_selected:
+                        choice_style = "font-weight: bold; color: #1e3a8a;"
+                        if is_correct:
+                            choice_label = " <span style='color: #16a34a; font-weight: bold;'>[Jawaban Siswa - Benar]</span>"
+                        else:
+                            choice_label = " <span style='color: #dc2626; font-weight: bold;'>[Jawaban Siswa - Salah]</span>"
+                    elif is_correct:
+                        choice_style = "color: #16a34a; font-weight: bold;"
+                        choice_label = " <span style='color: #16a34a; font-weight: bold;'>[Kunci Jawaban]</span>"
+                        
+                    choices_html += f'''
+                    <div class="choice-item" style="{choice_style}">
+                        {char}. {choice.choice_text} {choice_label}
+                    </div>
+                    '''
+                
+                result_class = "correct" if ans and ans.is_correct else "incorrect"
+                result_text = f"Benar (Skor: {points_earned:.1f} / {max_points:.1f})" if ans and ans.is_correct else f"Salah (Skor: {points_earned:.1f} / {max_points:.1f})"
+                if not ans:
+                    result_text = f"Tidak Dijawab (Skor: 0.0 / {max_points:.1f})"
+                    
+                q_html += f'''
+                <div class="question-item">
+                    <div class="question-text">{idx}. {q.question_text}</div>
+                    <div class="choices-grid">
+                        {choices_html}
+                    </div>
+                    <div class="answer-info {result_class}">
+                        <strong>Status:</strong> {result_text}
+                        {f'<div class="feedback-text">Feedback: {ans.ai_feedback}</div>' if ans and ans.ai_feedback else ''}
+                    </div>
+                </div>
+                '''
+            else:
+                student_ans = ans.essay_answer if ans else ''
+                student_ans_display = student_ans.replace('\n', '<br>') if student_ans else '<i>(Tidak Menjawab)</i>'
+                
+                result_class = "correct" if points_earned > (max_points / 2) else "incorrect"
+                result_text = f"Skor: {points_earned:.1f} / {max_points:.1f}"
+                
+                feedback_str = ''
+                if ans and ans.ai_feedback:
+                    feedback_str = ans.ai_feedback.replace("[Manual] ", "")
+                
+                q_html += f'''
+                <div class="question-item">
+                    <div class="question-text">{idx}. {q.question_text}</div>
+                    <div class="answer-info" style="background-color: #f8fafc; border-left: 3px solid #6366f1; color: #1e293b;">
+                        <strong>Jawaban Siswa:</strong>
+                        <p style="margin: 5px 0 0 0; font-family: monospace; font-size: 9.5pt;">{student_ans_display}</p>
+                    </div>
+                    <div class="answer-info {result_class}" style="margin-top: 5px;">
+                        <strong>Hasil Penilaian:</strong> {result_text}
+                        {f'<div class="feedback-text"><strong>Feedback/Analisis:</strong> {feedback_str}</div>' if feedback_str else ''}
+                    </div>
+                </div>
+                '''
+
+        tahun_pelajaran = "-"
+        if session.started_at:
+            year = int(session.started_at.strftime('%Y'))
+            month = int(session.started_at.strftime('%m'))
+            if month >= 7:
+                tahun_pelajaran = f"{year}/{year + 1}"
+            else:
+                tahun_pelajaran = f"{year - 1}/{year}"
+
+        html_content = f'''
+        <html>
+        <head>
+            <style>
+                @page {{
+                    size: a4;
+                    margin: 1.5cm;
+                    margin-bottom: 2cm;
+                    @frame footer {{
+                        -pdf-frame-content: footerContent;
+                        bottom: 1.2cm;
+                        margin-left: 1.5cm;
+                        margin-right: 1.5cm;
+                        height: 1cm;
+                    }}
+                }}
+                body {{
+                    font-family: Arial, sans-serif;
+                    font-size: 10pt;
+                    line-height: 1.4;
+                    color: #000000;
+                }}
+                .header {{
+                    text-align: center;
+                    margin-bottom: 5px;
+                }}
+                .header h1 {{
+                    font-size: 13pt;
+                    margin: 2px 0;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                }}
+                .header h2 {{
+                    font-size: 11pt;
+                    margin: 2px 0;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                }}
+                .header h3 {{
+                    font-size: 10pt;
+                    margin: 2px 0;
+                    font-weight: normal;
+                }}
+                .double-line {{
+                    border-top: 3px solid #000;
+                    border-bottom: 1px solid #000;
+                    height: 2px;
+                    margin: 10px 0 15px 0;
+                }}
+                .doc-title {{
+                    text-align: center;
+                    font-size: 12pt;
+                    font-weight: bold;
+                    text-decoration: underline;
+                    margin-bottom: 20px;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                }}
+                .meta-table {{
+                    width: 100%;
+                }}
+                .meta-table td {{
+                    padding: 3px 0;
+                    vertical-align: top;
+                    font-size: 9.5pt;
+                }}
+                .score-box {{
+                    border: 2px solid #000000;
+                    padding: 10px;
+                    text-align: center;
+                    width: 110px;
+                    background-color: #ffffff;
+                }}
+                .score-box .score-title {{
+                    font-size: 8pt;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                    margin-bottom: 3px;
+                    letter-spacing: 0.5px;
+                }}
+                .score-box .score-value {{
+                    font-size: 26pt;
+                    font-weight: bold;
+                    color: #000000;
+                }}
+                .question-section {{
+                    margin-top: 10px;
+                }}
+                .question-item {{
+                    margin-bottom: 18px;
+                    page-break-inside: avoid;
+                    border-bottom: 1px dashed #e2e8f0;
+                    padding-bottom: 10px;
+                }}
+                .question-text {{
+                    font-weight: bold;
+                    margin-bottom: 6px;
+                    font-size: 10pt;
+                }}
+                .choices-grid {{
+                    margin-left: 15px;
+                    margin-bottom: 8px;
+                }}
+                .choice-item {{
+                    margin-bottom: 4px;
+                    font-size: 9.5pt;
+                }}
+                .answer-info {{
+                    padding: 6px 10px;
+                    margin-left: 15px;
+                    margin-top: 5px;
+                    font-size: 9pt;
+                    border-radius: 4px;
+                }}
+                .answer-info.correct {{
+                    background-color: #e2f0d9;
+                    border-left: 3px solid #385723;
+                    color: #385723;
+                }}
+                .answer-info.incorrect {{
+                    background-color: #fce4d6;
+                    border-left: 3px solid #c65911;
+                    color: #c65911;
+                }}
+                .feedback-text {{
+                    font-style: italic;
+                    margin-top: 4px;
+                    color: #404040;
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="footerContent" style="text-align: right; font-size: 8pt; color: #555555; font-family: Arial, sans-serif;">
+                Halaman <pdf:pagenumber>
+            </div>
+            
+            <div class="header">
+                <h1>PEMERINTAH KABUPATEN NEVUIAN</h1>
+                <h2>DINAS PENDIDIKAN</h2>
+                <h2>UPT DINAS PENDIDIKAN KECAMATAN NEVUIAN</h2>
+                <h1 style="font-size: 15pt; margin-top: 6px;">{exam.title.upper()}</h1>
+                <h3>Mata Pelajaran: {exam.subject} | Tahun Pelajaran {tahun_pelajaran}</h3>
+            </div>
+            
+            <div class="double-line"></div>
+            
+            <div class="doc-title">LEMBAR HASIL UJIAN</div>
+            
+            <table style="width: 100%; border: none; margin-bottom: 15px;">
+                <tr>
+                    <td style="width: 70%; border: none; padding: 0; vertical-align: top;">
+                        <table class="meta-table" style="border: none;">
+                            <tr>
+                                <td style="width: 120px; font-weight: bold;">MATA PELAJARAN</td>
+                                <td style="width: 10px;">:</td>
+                                <td style="font-weight: bold;">{exam.subject.upper()}</td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: bold;">NAMA PESERTA</td>
+                                <td>:</td>
+                                <td>{session.participant_name.upper()}</td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: bold;">NIS / USERNAME</td>
+                                <td>:</td>
+                                <td>{nis.upper()}</td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: bold;">KELAS TARGET</td>
+                                <td>:</td>
+                                <td>{kelas.upper()}</td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: bold;">HARI / TANGGAL</td>
+                                <td>:</td>
+                                <td>{hari_tanggal}</td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: bold;">LAMA PENGERJAAN</td>
+                                <td>:</td>
+                                <td>{waktu}</td>
+                            </tr>
+                        </table>
+                    </td>
+                    <td style="width: 30%; border: none; padding: 0; text-align: right; vertical-align: top;">
+                        <div class="score-box" style="display: inline-block;">
+                            <div class="score-title">NILAI AKHIR</div>
+                            <div class="score-value">{f"{float(session.score):.1f}" if session.score is not None else '-'}</div>
+                            <div style="font-size: 7.5pt; color: #595959; margin-top: 3px;">Poin: {total_earned:.1f} / {total_max:.1f}</div>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+            
+            <div style="border-top: 1px solid #000; margin-bottom: 15px;"></div>
+            
+            <div class="question-section">
+                {q_html}
+            </div>
+        </body>
+        </html>
+        '''
+
+        response = HttpResponse(content_type='application/pdf')
+        filename = f'lembar_jawaban_{session.participant_name.replace(" ", "_")}_{exam.exam_code}.pdf'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        pisa.CreatePDF(html_content, dest=response)
+        return response
+
+
+class ExportSessionDocxView(generics.GenericAPIView):
+    """Export an individual student's exam sheet/result to Word (.docx)."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, session_id):
+        import io
+        from docx import Document
+        from docx.shared import Pt, Inches, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.enum.table import WD_TABLE_ALIGNMENT
+        from docx.oxml import parse_xml
+
+        session = generics.get_object_or_404(ExamSession, pk=session_id)
+
+        # Access check
+        is_guest_allowed = False
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        if auth_header.startswith('Guest '):
+            token = auth_header[6:]
+            try:
+                guest = GuestParticipant.objects.get(access_token=token)
+                if guest.is_token_valid and session.guest_participant == guest:
+                    is_guest_allowed = True
+            except GuestParticipant.DoesNotExist:
+                pass
+
+        is_user_allowed = False
+        if request.user and request.user.is_authenticated:
+            if request.user.role in ('admin', 'teacher') or session.student == request.user:
+                is_user_allowed = True
+
+        if not is_guest_allowed and not is_user_allowed:
+            return Response({'error': 'Anda tidak memiliki akses ke lembar ujian ini.'}, status=status.HTTP_403_FORBIDDEN)
+
+        exam = session.exam
+        questions = exam.questions.all().order_by('order')
+        answers = {ans.question_id: ans for ans in session.answers.all().select_related('selected_choice')}
+
+        # Formatting date and time
+        hari_tanggal = '-'
+        waktu = '-'
+        if session.started_at:
+            local_started_at = timezone.localtime(session.started_at)
+            hari_tanggal = local_started_at.strftime('%A, %d %B %Y')
+            waktu = local_started_at.strftime('%H:%M')
+            
+            day_translations = {
+                'Monday': 'Senin', 'Tuesday': 'Selasa', 'Wednesday': 'Rabu',
+                'Thursday': 'Kamis', 'Friday': 'Jumat', 'Saturday': 'Sabtu', 'Sunday': 'Minggu'
+            }
+            month_translations = {
+                'January': 'Januari', 'February': 'Februari', 'March': 'Maret', 'April': 'April',
+                'May': 'Mei', 'June': 'Juni', 'July': 'Juli', 'August': 'Agustus',
+                'September': 'September', 'October': 'Oktober', 'November': 'November', 'December': 'Desember'
+            }
+            for eng, ind in day_translations.items():
+                hari_tanggal = hari_tanggal.replace(eng, ind)
+            for eng, ind in month_translations.items():
+                hari_tanggal = hari_tanggal.replace(eng, ind)
+
+            if session.submitted_at:
+                local_submitted_at = timezone.localtime(session.submitted_at)
+                waktu += f' - {local_submitted_at.strftime("%H:%M")}'
+            else:
+                waktu += ' - Selesai'
+
+        nis = '-'
+        kelas = '-'
+        if session.student:
+            profile = getattr(session.student, 'student_profile', None)
+            if profile:
+                nis = profile.nis
+                kelas = profile.class_name
+        elif session.guest_participant:
+            nis = session.guest_participant.nis
+            kelas = session.guest_participant.class_name
+
+        total_earned = sum(float(ans.points_earned) for ans in answers.values())
+        total_max = sum(q.points for q in questions)
+
+        tahun_pelajaran = "-"
+        if session.started_at:
+            year = int(session.started_at.strftime('%Y'))
+            month = int(session.started_at.strftime('%m'))
+            if month >= 7:
+                tahun_pelajaran = f"{year}/{year + 1}"
+            else:
+                tahun_pelajaran = f"{year - 1}/{year}"
+
+        doc = Document()
+        
+        # Set margins to 0.8 inches
+        for s in doc.sections:
+            s.top_margin = Inches(0.8)
+            s.bottom_margin = Inches(0.8)
+            s.left_margin = Inches(0.8)
+            s.right_margin = Inches(0.8)
+
+        # Center align text for Kop Surat
+        p_kop = doc.add_paragraph()
+        p_kop.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_kop.paragraph_format.space_after = Pt(2)
+        
+        r1 = p_kop.add_run("PEMERINTAH KABUPATEN NEVUIAN\n")
+        r1.bold = True
+        r1.font.size = Pt(13)
+        r1.font.name = 'Arial'
+
+        r2 = p_kop.add_run("DINAS PENDIDIKAN\n")
+        r2.bold = True
+        r2.font.size = Pt(11)
+        r2.font.name = 'Arial'
+
+        r3 = p_kop.add_run("UPT DINAS PENDIDIKAN KECAMATAN NEVUIAN\n")
+        r3.bold = True
+        r3.font.size = Pt(11)
+        r3.font.name = 'Arial'
+
+        r4 = p_kop.add_run(f"{exam.title.upper()}\n")
+        r4.bold = True
+        r4.font.size = Pt(14)
+        r4.font.name = 'Arial'
+
+        r5 = p_kop.add_run(f"Mata Pelajaran: {exam.subject} | Tahun Pelajaran {tahun_pelajaran}")
+        r5.font.size = Pt(10)
+        r5.font.name = 'Arial'
+
+        # Add double line border under Kop Surat paragraph
+        pPr = p_kop._p.get_or_add_pPr()
+        pBdr = parse_xml(r'<w:pBdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                         r'  <w:bottom w:val="double" w:sz="18" w:space="8" w:color="000000"/>'
+                         r'</w:pBdr>')
+        pPr.append(pBdr)
+
+        # Document Title
+        p_title = doc.add_paragraph()
+        p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_title.paragraph_format.space_before = Pt(12)
+        p_title.paragraph_format.space_after = Pt(12)
+        r_title = p_title.add_run("LEMBAR HASIL UJIAN")
+        r_title.bold = True
+        r_title.font.size = Pt(12)
+        r_title.font.underline = True
+        r_title.font.name = 'Arial'
+
+        # Metadata Table & Score Box Layout Table
+        table = doc.add_table(rows=1, cols=2)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.autofit = False
+        table.columns[0].width = Inches(4.8)
+        table.columns[1].width = Inches(1.7)
+
+        cell_left = table.cell(0, 0)
+        cell_right = table.cell(0, 1)
+
+        meta_data = [
+            ("MATA PELAJARAN", exam.subject.upper()),
+            ("NAMA PESERTA", session.participant_name.upper()),
+            ("NIS / USERNAME", nis.upper()),
+            ("KELAS TARGET", kelas.upper()),
+            ("HARI / TANGGAL", hari_tanggal),
+            ("LAMA PENGERJAAN", waktu),
+        ]
+
+        # Nested metadata table
+        nested_table = cell_left.add_table(rows=len(meta_data), cols=3)
+        nested_table.autofit = False
+        nested_table.columns[0].width = Inches(1.6)
+        nested_table.columns[1].width = Inches(0.2)
+        nested_table.columns[2].width = Inches(3.0)
+
+        for i, (label, val) in enumerate(meta_data):
+            c0 = nested_table.cell(i, 0)
+            c1 = nested_table.cell(i, 1)
+            c2 = nested_table.cell(i, 2)
+            
+            p0 = c0.paragraphs[0]
+            p0.paragraph_format.space_after = Pt(1)
+            p0.paragraph_format.space_before = Pt(1)
+            r0 = p0.add_run(label)
+            r0.bold = True
+            r0.font.name = 'Arial'
+            r0.font.size = Pt(9)
+            
+            p1 = c1.paragraphs[0]
+            p1.paragraph_format.space_after = Pt(1)
+            p1.paragraph_format.space_before = Pt(1)
+            r1 = p1.add_run(":")
+            r1.font.name = 'Arial'
+            r1.font.size = Pt(9)
+            
+            p2 = c2.paragraphs[0]
+            p2.paragraph_format.space_after = Pt(1)
+            p2.paragraph_format.space_before = Pt(1)
+            r2 = p2.add_run(val)
+            r2.font.name = 'Arial'
+            r2.font.size = Pt(9)
+            if label in ("MATA PELAJARAN", "NAMA PESERTA"):
+                r2.bold = True
+
+        # Score Box formatting
+        tcPr = cell_right._tc.get_or_add_tcPr()
+        tcBorders = parse_xml(r'<w:tcBorders xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                              r'  <w:top w:val="single" w:sz="12" w:space="0" w:color="000000"/>'
+                              r'  <w:left w:val="single" w:sz="12" w:space="0" w:color="000000"/>'
+                              r'  <w:bottom w:val="single" w:sz="12" w:space="0" w:color="000000"/>'
+                              r'  <w:right w:val="single" w:sz="12" w:space="0" w:color="000000"/>'
+                              r'</w:tcBorders>')
+        tcPr.append(tcBorders)
+
+        tcMar = parse_xml(r'<w:tcMar xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                          r'  <w:top w:w="120" w:type="dxa"/>'
+                          r'  <w:left w:w="120" w:type="dxa"/>'
+                          r'  <w:bottom w:w="120" w:type="dxa"/>'
+                          r'  <w:right w:w="120" w:type="dxa"/>'
+                          r'</w:tcMar>')
+        tcPr.append(tcMar)
+
+        p_score_lbl = cell_right.paragraphs[0]
+        p_score_lbl.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_score_lbl.paragraph_format.space_after = Pt(2)
+        r_lbl = p_score_lbl.add_run("NILAI AKHIR")
+        r_lbl.bold = True
+        r_lbl.font.size = Pt(8.5)
+        r_lbl.font.name = 'Arial'
+
+        p_score_val = cell_right.add_paragraph()
+        p_score_val.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_score_val.paragraph_format.space_before = Pt(2)
+        p_score_val.paragraph_format.space_after = Pt(2)
+        score_str = f"{float(session.score):.1f}" if session.score is not None else '-'
+        r_val = p_score_val.add_run(score_str)
+        r_val.bold = True
+        r_val.font.size = Pt(26)
+        r_val.font.name = 'Arial'
+
+        p_score_sub = cell_right.add_paragraph()
+        p_score_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_score_sub.paragraph_format.space_before = Pt(2)
+        p_score_sub.paragraph_format.space_after = Pt(0)
+        r_sub = p_score_sub.add_run(f"Poin: {total_earned:.1f} / {total_max:.1f}")
+        r_sub.font.size = Pt(7.5)
+        r_sub.font.name = 'Arial'
+        r_sub.font.color.rgb = RGBColor(89, 89, 89)
+
+        # Separator line
+        p_sep = doc.add_paragraph()
+        p_sep.paragraph_format.space_before = Pt(12)
+        p_sep.paragraph_format.space_after = Pt(12)
+        pPr_sep = p_sep._p.get_or_add_pPr()
+        pBdr_sep = parse_xml(r'<w:pBdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                             r'  <w:bottom w:val="single" w:sz="6" w:space="1" w:color="CCCCCC"/>'
+                             r'</w:pBdr>')
+        pPr_sep.append(pBdr_sep)
+
+        # Questions list
+        for idx, q in enumerate(questions, 1):
+            ans = answers.get(q.id)
+            points_earned = float(ans.points_earned) if ans else 0.0
+            max_points = q.points
+            
+            p_q = doc.add_paragraph()
+            p_q.paragraph_format.space_before = Pt(8)
+            p_q.paragraph_format.space_after = Pt(4)
+            p_q.paragraph_format.keep_with_next = True
+            
+            r_q = p_q.add_run(f"{idx}. {q.question_text}")
+            r_q.bold = True
+            r_q.font.name = 'Arial'
+            r_q.font.size = Pt(10.5)
+
+            if q.question_type == 'multiple_choice':
+                choices = q.choices.all().order_by('order')
+                for c_idx, choice in enumerate(choices):
+                    char = chr(65 + c_idx)
+                    is_selected = ans and ans.selected_choice_id == choice.id
+                    is_correct = choice.is_correct
+                    
+                    p_c = doc.add_paragraph()
+                    p_c.paragraph_format.left_indent = Inches(0.25)
+                    p_c.paragraph_format.space_before = Pt(1)
+                    p_c.paragraph_format.space_after = Pt(1)
+                    
+                    r_char = p_c.add_run(f"{char}. {choice.choice_text}")
+                    r_char.font.name = 'Arial'
+                    r_char.font.size = Pt(9.5)
+                    
+                    if is_selected:
+                        r_char.bold = True
+                        if is_correct:
+                            r_lbl = p_c.add_run(" [Jawaban Siswa - Benar]")
+                            r_lbl.bold = True
+                            r_lbl.font.color.rgb = RGBColor(22, 163, 74)
+                        else:
+                            r_lbl = p_c.add_run(" [Jawaban Siswa - Salah]")
+                            r_lbl.bold = True
+                            r_lbl.font.color.rgb = RGBColor(220, 38, 38)
+                    elif is_correct:
+                        r_char.font.color.rgb = RGBColor(22, 163, 74)
+                        r_lbl = p_c.add_run(" [Kunci Jawaban]")
+                        r_lbl.bold = True
+                        r_lbl.font.color.rgb = RGBColor(22, 163, 74)
+
+                # Shaded alert box for status
+                p_stat = doc.add_paragraph()
+                p_stat.paragraph_format.left_indent = Inches(0.25)
+                p_stat.paragraph_format.space_before = Pt(4)
+                p_stat.paragraph_format.space_after = Pt(8)
+                
+                result_text = f"Benar (Skor: {points_earned:.1f} / {max_points:.1f})" if ans and ans.is_correct else f"Salah (Skor: {points_earned:.1f} / {max_points:.1f})"
+                if not ans:
+                    result_text = f"Tidak Dijawab (Skor: 0.0 / {max_points:.1f})"
+                    
+                r_stat_lbl = p_stat.add_run("Status: ")
+                r_stat_lbl.bold = True
+                r_stat_lbl.font.name = 'Arial'
+                r_stat_lbl.font.size = Pt(9)
+                
+                r_stat_val = p_stat.add_run(result_text)
+                r_stat_val.font.name = 'Arial'
+                r_stat_val.font.size = Pt(9)
+                if ans and ans.is_correct:
+                    r_stat_val.font.color.rgb = RGBColor(56, 87, 35)
+                else:
+                    r_stat_val.font.color.rgb = RGBColor(198, 89, 17)
+                    
+                if ans and ans.ai_feedback:
+                    p_stat.add_run("\nFeedback: ")
+                    r_fb = p_stat.add_run(ans.ai_feedback)
+                    r_fb.italic = True
+                    r_fb.font.name = 'Arial'
+                    r_fb.font.size = Pt(8.5)
+                    r_fb.font.color.rgb = RGBColor(64, 64, 64)
+                    
+                pPr = p_stat._p.get_or_add_pPr()
+                pBdr = parse_xml(r'<w:pBdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                                 r'  <w:left w:val="single" w:sz="24" w:space="4" w:color="' + ('385723' if ans and ans.is_correct else 'C65911') + r'"/>'
+                                 r'</w:pBdr>')
+                pPr.append(pBdr)
+                shd = parse_xml(r'<w:shd xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:fill="' + ('E2F0D9' if ans and ans.is_correct else 'FCE4D6') + r'"/>')
+                pPr.append(shd)
+
+            else:
+                student_ans = ans.essay_answer if ans else ''
+                student_ans_display = student_ans if student_ans else '(Tidak Menjawab)'
+                
+                p_ans_title = doc.add_paragraph()
+                p_ans_title.paragraph_format.left_indent = Inches(0.25)
+                p_ans_title.paragraph_format.space_before = Pt(4)
+                p_ans_title.paragraph_format.space_after = Pt(2)
+                r_ans_title = p_ans_title.add_run("Jawaban Siswa:")
+                r_ans_title.bold = True
+                r_ans_title.font.name = 'Arial'
+                r_ans_title.font.size = Pt(9)
+                
+                p_ans = doc.add_paragraph()
+                p_ans.paragraph_format.left_indent = Inches(0.25)
+                p_ans.paragraph_format.space_before = Pt(0)
+                p_ans.paragraph_format.space_after = Pt(6)
+                r_ans_val = p_ans.add_run(student_ans_display)
+                r_ans_val.font.name = 'Courier New'
+                r_ans_val.font.size = Pt(9.5)
+                
+                pPr_ans = p_ans._p.get_or_add_pPr()
+                pBdr_ans = parse_xml(r'<w:pBdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                                     r'  <w:left w:val="single" w:sz="24" w:space="4" w:color="6366F1"/>'
+                                     r'</w:pBdr>')
+                pPr_ans.append(pBdr_ans)
+                shd_ans = parse_xml(r'<w:shd xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:fill="F8FAFC"/>')
+                pPr_ans.append(shd_ans)
+                
+                p_grad = doc.add_paragraph()
+                p_grad.paragraph_format.left_indent = Inches(0.25)
+                p_grad.paragraph_format.space_before = Pt(4)
+                p_grad.paragraph_format.space_after = Pt(8)
+                
+                result_text = f"Skor: {points_earned:.1f} / {max_points:.1f}"
+                is_pass = points_earned >= (max_points / 2)
+                
+                r_grad_lbl = p_grad.add_run("Hasil Penilaian: ")
+                r_grad_lbl.bold = True
+                r_grad_lbl.font.name = 'Arial'
+                r_grad_lbl.font.size = Pt(9)
+                
+                r_grad_val = p_grad.add_run(result_text)
+                r_grad_val.font.name = 'Arial'
+                r_grad_val.font.size = Pt(9)
+                r_grad_val.font.color.rgb = RGBColor(56, 87, 35) if is_pass else RGBColor(198, 89, 17)
+                
+                feedback_str = ''
+                if ans and ans.ai_feedback:
+                    feedback_str = ans.ai_feedback.replace("[Manual] ", "")
+                    
+                if feedback_str:
+                    p_grad.add_run("\nFeedback/Analisis: ")
+                    r_fb = p_grad.add_run(feedback_str)
+                    r_fb.italic = True
+                    r_fb.font.name = 'Arial'
+                    r_fb.font.size = Pt(8.5)
+                    r_fb.font.color.rgb = RGBColor(64, 64, 64)
+                    
+                pPr_grad = p_grad._p.get_or_add_pPr()
+                pBdr_grad = parse_xml(r'<w:pBdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                                      r'  <w:left w:val="single" w:sz="24" w:space="4" w:color="' + ('385723' if is_pass else 'C65911') + r'"/>'
+                                      r'</w:pBdr>')
+                pPr_grad.append(pBdr_grad)
+                shd_grad = parse_xml(r'<w:shd xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:fill="' + ('E2F0D9' if is_pass else 'FCE4D6') + r'"/>')
+                pPr_grad.append(shd_grad)
+
+        response = HttpResponse(
+            output.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+        filename = f'lembar_jawaban_{session.participant_name.replace(" ", "_")}_{exam.exam_code}.docx'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
+class ExportQuestionsDocxView(generics.GenericAPIView):
+    """Export exam questions to Word (.docx) for print/distribution."""
+    permission_classes = [IsAdminOrTeacher]
+
+    def get(self, request, exam_id):
+        import io
+        from django.utils import timezone
+        from docx import Document
+        from docx.shared import Pt, Inches, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.enum.table import WD_TABLE_ALIGNMENT
+        from docx.oxml import parse_xml
+
+        exam = generics.get_object_or_404(Exam, pk=exam_id)
+        questions = exam.questions.all().order_by('order')
+
+        tahun_pelajaran = "-"
+        now = timezone.now()
+        year = int(now.strftime('%Y'))
+        month = int(now.strftime('%m'))
+        if month >= 7:
+            tahun_pelajaran = f"{year}/{year + 1}"
+        else:
+            tahun_pelajaran = f"{year - 1}/{year}"
+
+        doc = Document()
+        
+        # Set margins to 0.8 inches
+        for s in doc.sections:
+            s.top_margin = Inches(0.8)
+            s.bottom_margin = Inches(0.8)
+            s.left_margin = Inches(0.8)
+            s.right_margin = Inches(0.8)
+
+        # Center align text for Kop Surat
+        p_kop = doc.add_paragraph()
+        p_kop.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_kop.paragraph_format.space_after = Pt(2)
+        
+        r1 = p_kop.add_run("PEMERINTAH KABUPATEN NEVUIAN\n")
+        r1.bold = True
+        r1.font.size = Pt(13)
+        r1.font.name = 'Arial'
+
+        r2 = p_kop.add_run("DINAS PENDIDIKAN\n")
+        r2.bold = True
+        r2.font.size = Pt(11)
+        r2.font.name = 'Arial'
+
+        r3 = p_kop.add_run("UPT DINAS PENDIDIKAN KECAMATAN NEVUIAN\n")
+        r3.bold = True
+        r3.font.size = Pt(11)
+        r3.font.name = 'Arial'
+
+        r4 = p_kop.add_run(f"{exam.title.upper()}\n")
+        r4.bold = True
+        r4.font.size = Pt(14)
+        r4.font.name = 'Arial'
+
+        r5 = p_kop.add_run(f"TAHUN PELAJARAN {tahun_pelajaran}")
+        r5.font.size = Pt(10)
+        r5.font.name = 'Arial'
+
+        # Add double line border under Kop Surat paragraph
+        pPr = p_kop._p.get_or_add_pPr()
+        pBdr = parse_xml(r'<w:pBdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                         r'  <w:bottom w:val="double" w:sz="18" w:space="8" w:color="000000"/>'
+                         r'</w:pBdr>')
+        pPr.append(pBdr)
+
+        # Document Title
+        p_title = doc.add_paragraph()
+        p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_title.paragraph_format.space_before = Pt(12)
+        p_title.paragraph_format.space_after = Pt(12)
+        r_title = p_title.add_run("LEMBAR SOAL")
+        r_title.bold = True
+        r_title.font.size = Pt(13)
+        r_title.font.name = 'Arial'
+
+        # Metadata Table
+        meta_table = doc.add_table(rows=4, cols=3)
+        meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        meta_table.autofit = False
+        meta_table.columns[0].width = Inches(2.2)
+        meta_table.columns[1].width = Inches(0.2)
+        meta_table.columns[2].width = Inches(4.1)
+
+        meta_rows = [
+            ("MATA PELAJARAN", exam.subject.upper()),
+            ("KELAS / TARGET", exam.class_target.upper()),
+            ("WAKTU PENGERJAAN", f"{exam.duration_minutes} MENIT"),
+            ("HARI / TANGGAL", "............................................."),
+        ]
+
+        for i, (label, val) in enumerate(meta_rows):
+            c0 = meta_table.cell(i, 0)
+            c1 = meta_table.cell(i, 1)
+            c2 = meta_table.cell(i, 2)
+            
+            p0 = c0.paragraphs[0]
+            p0.paragraph_format.space_after = Pt(2)
+            p0.paragraph_format.space_before = Pt(2)
+            r0 = p0.add_run(label)
+            r0.bold = True
+            r0.font.name = 'Arial'
+            r0.font.size = Pt(9.5)
+            
+            p1 = c1.paragraphs[0]
+            p1.paragraph_format.space_after = Pt(2)
+            p1.paragraph_format.space_before = Pt(2)
+            r1 = p1.add_run(":")
+            r1.font.name = 'Arial'
+            r1.font.size = Pt(9.5)
+            
+            p2 = c2.paragraphs[0]
+            p2.paragraph_format.space_after = Pt(2)
+            p2.paragraph_format.space_before = Pt(2)
+            r2 = p2.add_run(val)
+            r2.font.name = 'Arial'
+            r2.font.size = Pt(9.5)
+            if label != "HARI / TANGGAL":
+                r2.bold = True
+
+        # Separator line
+        p_sep = doc.add_paragraph()
+        p_sep.paragraph_format.space_before = Pt(12)
+        p_sep.paragraph_format.space_after = Pt(12)
+        pPr_sep = p_sep._p.get_or_add_pPr()
+        pBdr_sep = parse_xml(r'<w:pBdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                             r'  <w:bottom w:val="single" w:sz="6" w:space="1" w:color="000000"/>'
+                             r'</w:pBdr>')
+        pPr_sep.append(pBdr_sep)
+
+        # Petunjuk Umum Section
+        p_petunjuk_hdr = doc.add_paragraph()
+        p_petunjuk_hdr.paragraph_format.space_before = Pt(4)
+        p_petunjuk_hdr.paragraph_format.space_after = Pt(2)
+        r_ph = p_petunjuk_hdr.add_run("PETUNJUK UMUM:")
+        r_ph.bold = True
+        r_ph.font.name = 'Arial'
+        r_ph.font.size = Pt(9.5)
+
+        petunjuk_list = [
+            "Berdoalah sebelum mulai mengerjakan soal.",
+            "Tulislah identitas Anda pada lembar jawaban yang tersedia.",
+            "Bacalah soal-soal dengan teliti sebelum Anda menjawabnya.",
+            "Dahulukan menjawab soal-soal yang Anda anggap mudah.",
+            "Periksalah pekerjaan Anda sebelum diserahkan kepada pengawas.",
+        ]
+        for idx_p, petunjuk in enumerate(petunjuk_list, 1):
+            p_pet = doc.add_paragraph()
+            p_pet.paragraph_format.left_indent = Inches(0.2)
+            p_pet.paragraph_format.space_after = Pt(1)
+            p_pet.paragraph_format.space_before = Pt(1)
+            r_p = p_pet.add_run(f"{idx_p}. {petunjuk}")
+            r_p.font.name = 'Arial'
+            r_p.font.size = Pt(9)
+            r_p.font.color.rgb = RGBColor(64, 64, 64)
+
+        # Separator line after instructions
+        p_sep2 = doc.add_paragraph()
+        p_sep2.paragraph_format.space_before = Pt(8)
+        p_sep2.paragraph_format.space_after = Pt(16)
+        pPr_sep2 = p_sep2._p.get_or_add_pPr()
+        pBdr_sep2 = parse_xml(r'<w:pBdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                              r'  <w:bottom w:val="single" w:sz="6" w:space="1" w:color="000000"/>'
+                              r'</w:pBdr>')
+        pPr_sep2.append(pBdr_sep2)
+
+        # Questions listing
+        for idx, q in enumerate(questions, 1):
+            p_q = doc.add_paragraph()
+            p_q.paragraph_format.space_before = Pt(8)
+            p_q.paragraph_format.space_after = Pt(4)
+            p_q.paragraph_format.keep_with_next = True
+            
+            r_q = p_q.add_run(f"{idx}. {q.question_text}")
+            r_q.bold = True
+            r_q.font.name = 'Arial'
+            r_q.font.size = Pt(10.5)
+
+            if q.question_type == 'multiple_choice':
+                choices = q.choices.all().order_by('order')
+                for c_idx, choice in enumerate(choices):
+                    char = chr(65 + c_idx)
+                    p_c = doc.add_paragraph()
+                    p_c.paragraph_format.left_indent = Inches(0.25)
+                    p_c.paragraph_format.space_before = Pt(1)
+                    p_c.paragraph_format.space_after = Pt(1)
+                    
+                    r_char = p_c.add_run(f"{char}. {choice.choice_text}")
+                    r_char.font.name = 'Arial'
+                    r_char.font.size = Pt(9.5)
+            else:
+                # Essay question, leave space for answers
+                p_ans_space = doc.add_paragraph()
+                p_ans_space.paragraph_format.left_indent = Inches(0.25)
+                p_ans_space.paragraph_format.space_before = Pt(6)
+                p_ans_space.paragraph_format.space_after = Pt(6)
+                
+                # Draw lines for student to write
+                r_lines = p_ans_space.add_run(
+                    "Jawaban:\n"
+                    "_________________________________________________________________________________\n"
+                    "_________________________________________________________________________________\n"
+                    "_________________________________________________________________________________"
+                )
+                r_lines.font.name = 'Arial'
+                r_lines.font.size = Pt(9.5)
+                r_lines.font.color.rgb = RGBColor(128, 128, 128)
+
+        # Save to memory stream
+        output = io.BytesIO()
+        doc.save(output)
+        output.seek(0)
+
+        response = HttpResponse(
+            output.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+        filename = f'lembar_soal_{exam.title.replace(" ", "_")}_{exam.exam_code}.docx'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
 

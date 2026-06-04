@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard, FileText, Users, LogOut, Moon, Sun,
-  Menu, X, ChevronRight, GraduationCap, ClipboardList, Cpu
+  Menu, X, ChevronRight, GraduationCap, ClipboardList, Cpu, UserCog
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }) {
@@ -31,6 +31,7 @@ export default function DashboardLayout({ children }) {
   const adminLinks = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
     { icon: FileText, label: 'Ujian', path: '/exams' },
+    { icon: UserCog, label: 'Kelola User', path: '/users' },
     { icon: Cpu, label: 'Pengaturan AI', path: '/settings/ai' },
   ];
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { examApi } from '../api/examApi';
-import { ArrowLeft, Plus, Trash2, Save, GripVertical, Upload, Sparkles } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, GripVertical, Upload, Sparkles, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function ExamQuestionsPage() {
@@ -21,6 +21,26 @@ export default function ExamQuestionsPage() {
   const [aiModal, setAiModal] = useState(false);
   const [aiForm, setAiForm] = useState({ topic: '', question_type: 'multiple_choice', count: 5, points: 10 });
   const [generating, setGenerating] = useState(false);
+  const [exportingDocx, setExportingDocx] = useState(false);
+
+  const handleExportDocx = async () => {
+    try {
+      setExportingDocx(true);
+      const res = await examApi.exportQuestionsDocx(id);
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `lembar_soal_${exam?.title?.replace(/\s+/g, '_') || id}.docx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('Lembar soal Word berhasil diunduh');
+    } catch {
+      toast.error('Gagal mengunduh berkas Word');
+    } finally {
+      setExportingDocx(false);
+    }
+  };
 
   const handleGenerateAI = async () => {
     if (!aiForm.topic.trim()) {
@@ -157,19 +177,26 @@ export default function ExamQuestionsPage() {
     <div className="slide-up">
       <div className="flex-between mb-2" style={{ flexWrap: 'wrap', gap: '1rem' }}>
         <button className="btn btn-ghost" onClick={() => navigate('/exams')}><ArrowLeft size={16} /> Kembali</button>
-        <div className="flex gap-1" style={{ alignItems: 'center' }}>
+        <div className="flex gap-1" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={handleDownloadTemplate}>Unduh Template Excel</button>
           <button className="btn btn-secondary btn-sm" onClick={() => { setAiModal(true); setAiForm({ topic: '', question_type: 'multiple_choice', count: 5, points: 10 }); }} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary-600)', background: 'var(--primary-50)', border: '1px solid var(--primary-200)' }}>
             <Sparkles size={14} /> Buat Soal AI
           </button>
           <button className="btn btn-primary btn-sm" onClick={() => { setImportModal(true); setExcelFile(null); setImportErrors([]); }}>Import Excel</button>
-          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginLeft: '0.5rem' }}>
+          <button className="btn btn-secondary btn-sm" onClick={handleExportDocx} disabled={exportingDocx || questions.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            {exportingDocx ? (
+              <><div className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} /> Mengunduh...</>
+            ) : (
+              <><FileText size={14} /> Export Word</>
+            )}
+          </button>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
             {exam?.title} — {questions.length} soal
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '1.5rem', alignItems: 'start' }}>
+      <div className="questions-layout">
         {/* Question List */}
         <div>
           {questions.length === 0 ? (
@@ -289,7 +316,7 @@ export default function ExamQuestionsPage() {
       {/* Import Modal */}
       {importModal && (
         <div className="modal-overlay" onClick={() => !importing && setImportModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">📥 Import Soal dari Excel</h3>
             </div>
@@ -359,7 +386,7 @@ export default function ExamQuestionsPage() {
       {/* AI Generate Modal */}
       {aiModal && (
         <div className="modal-overlay" onClick={() => !generating && setAiModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Sparkles size={18} className="text-primary" /> Buat Soal Otomatis dengan AI
@@ -391,7 +418,7 @@ export default function ExamQuestionsPage() {
                     <option value="essay">Essay</option>
                   </select>
                 </div>
-                <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Jumlah Soal</label>
                     <input

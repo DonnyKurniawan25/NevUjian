@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { examApi } from '../api/examApi';
-import { Play, Clock, CheckCircle, FileText, Lock } from 'lucide-react';
+import { Play, Clock, CheckCircle, FileText, Lock, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function StudentDashboard() {
@@ -13,6 +13,42 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [tokenModal, setTokenModal] = useState(null);
   const [tokenInput, setTokenInput] = useState('');
+  const [downloadingId, setDownloadingId] = useState(null);
+  const [downloadingDocxId, setDownloadingDocxId] = useState(null);
+
+  const handlePrintSheet = async (sessionId, examTitle) => {
+    try {
+      setDownloadingId(sessionId);
+      const res = await examApi.exportSessionPDF(sessionId);
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lembar_ujian_${examTitle.replace(/\s+/g, '_')}.pdf`;
+      a.click();
+      toast.success('PDF Lembar Ujian berhasil diunduh');
+    } catch {
+      toast.error('Gagal mengunduh PDF');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handlePrintWord = async (sessionId, examTitle) => {
+    try {
+      setDownloadingDocxId(sessionId);
+      const res = await examApi.exportSessionDocx(sessionId);
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lembar_ujian_${examTitle.replace(/\s+/g, '_')}.docx`;
+      a.click();
+      toast.success('Word Lembar Ujian berhasil diunduh');
+    } catch {
+      toast.error('Gagal mengunduh berkas Word');
+    } finally {
+      setDownloadingDocxId(null);
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -120,6 +156,7 @@ export default function StudentDashboard() {
                     <th>Status</th>
                     <th>Pelanggaran</th>
                     <th>Waktu</th>
+                    <th className="text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -133,6 +170,36 @@ export default function StudentDashboard() {
                       </td>
                       <td>{s.violation_count}</td>
                       <td style={{ fontSize: '0.78rem' }}>{new Date(s.started_at).toLocaleString('id')}</td>
+                      <td className="text-center">
+                        {s.status !== 'in_progress' && (
+                          <div style={{ display: 'inline-flex', gap: '0.4rem', justifyContent: 'center' }}>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => handlePrintSheet(s.id, s.exam_title)}
+                              disabled={downloadingId === s.id}
+                              style={{ padding: '0.25rem 0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                            >
+                              {downloadingId === s.id ? (
+                                <><div className="spinner" style={{ width: 10, height: 10, borderWidth: 1 }} /> Cetak</>
+                              ) : (
+                                <><Printer size={12} /> Cetak PDF</>
+                              )}
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => handlePrintWord(s.id, s.exam_title)}
+                              disabled={downloadingDocxId === s.id}
+                              style={{ padding: '0.25rem 0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                            >
+                              {downloadingDocxId === s.id ? (
+                                <><div className="spinner" style={{ width: 10, height: 10, borderWidth: 1 }} /> Cetak</>
+                              ) : (
+                                <><FileText size={12} /> Cetak Word</>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

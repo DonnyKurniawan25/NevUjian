@@ -30,6 +30,8 @@ export const examApi = {
   },
   downloadQuestionsTemplate: (examId) =>
     api.get(`/exams/${examId}/questions/download-template/`, { responseType: 'blob' }),
+  exportQuestionsDocx: (examId) =>
+    api.get(`/exams/${examId}/questions/export-word/`, { responseType: 'blob' }),
 
   // Results
   getResults: (examId, params) => api.get(`/exams/${examId}/results/`, { params }),
@@ -37,6 +39,8 @@ export const examApi = {
   // Export
   exportExcel: (examId) => api.get(`/exams/${examId}/export/excel/`, { responseType: 'blob' }),
   exportPDF: (examId) => api.get(`/exams/${examId}/export/pdf/`, { responseType: 'blob' }),
+  exportSessionPDF: (sessionId) => api.get(`/exams/sessions/${sessionId}/export-pdf/`, { responseType: 'blob' }),
+  exportSessionDocx: (sessionId) => api.get(`/exams/sessions/${sessionId}/export-docx/`, { responseType: 'blob' }),
 
   // Student endpoints
   getStudentExams: () => api.get('/student/exams/'),
@@ -59,6 +63,10 @@ export const examApi = {
   testAIConnection: (data) => api.post('/ai/settings/test-connection/', data),
   generateQuestionsAI: (examId, data) => api.post(`/exams/${examId}/ai-generate-questions/`, data),
   gradeEssaysAI: (sessionId) => api.post(`/student/exam-sessions/${sessionId}/grade-essays/`),
+
+  // Session management (teacher)
+  deleteSession: (sessionId) => api.delete(`/exams/sessions/${sessionId}/`),
+  manualGradeAnswer: (answerId, data) => api.patch(`/exams/answers/${answerId}/grade/`, data),
 };
 
 export default examApi;

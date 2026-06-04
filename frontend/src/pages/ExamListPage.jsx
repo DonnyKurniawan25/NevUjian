@@ -65,7 +65,7 @@ export default function ExamListPage() {
             <div key={exam.id} className="card" style={{ padding: '1.25rem 1.5rem' }}>
               <div className="flex-between">
                 <div style={{ flex: 1 }}>
-                  <div className="flex" style={{ gap: '0.5rem', alignItems: 'center', marginBottom: '0.3rem' }}>
+                  <div className="exam-card-title-row">
                     <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{exam.title}</h3>
                     <span className={`badge ${exam.access_mode === 'login_required' ? 'badge-primary' : exam.access_mode === 'guest_allowed' ? 'badge-success' : 'badge-warning'}`}>
                       {exam.access_mode === 'login_required' ? '🔒 Login' : exam.access_mode === 'guest_allowed' ? '🌐 Guest' : '🔄 Both'}

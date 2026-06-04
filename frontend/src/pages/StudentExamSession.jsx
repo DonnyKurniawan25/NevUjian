@@ -169,7 +169,7 @@ export default function StudentExamSession() {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: '1rem', padding: '1rem', maxWidth: 1200, margin: '0 auto' }}>
+      <div className="exam-session-grid">
         {/* Question Area */}
         <div>
           {q && (

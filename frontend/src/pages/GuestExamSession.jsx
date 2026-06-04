@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { guestApi } from '../api/publicApi';
 import { useGuest } from '../context/GuestContext';
-import { Clock, Send, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, Trophy } from 'lucide-react';
+import { Clock, Send, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, Trophy, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function GuestExamSession() {
@@ -17,10 +17,46 @@ export default function GuestExamSession() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
+  const [downloadingPDF, setDownloadingPDF] = useState(false);
+  const [downloadingDocx, setDownloadingDocx] = useState(false);
   const intervalRef = useRef(null);
   const isReportingRef = useRef(false);
   const hasPendingWarningRef = useRef(false);
   const violationCountRef = useRef(0);
+
+  const handlePrintSheet = async () => {
+    try {
+      setDownloadingPDF(true);
+      const res = await guestApi.exportSessionPDF(sessionId);
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lembar_ujian_${result?.participant_name || 'guest'}.pdf`;
+      a.click();
+      toast.success('PDF Lembar Ujian berhasil diunduh');
+    } catch {
+      toast.error('Gagal mengunduh PDF');
+    } finally {
+      setDownloadingPDF(false);
+    }
+  };
+
+  const handlePrintWord = async () => {
+    try {
+      setDownloadingDocx(true);
+      const res = await guestApi.exportSessionDocx(sessionId);
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lembar_ujian_${result?.participant_name || 'guest'}.docx`;
+      a.click();
+      toast.success('Word Lembar Ujian berhasil diunduh');
+    } catch {
+      toast.error('Gagal mengunduh berkas Word');
+    } finally {
+      setDownloadingDocx(false);
+    }
+  };
 
   // Sync violation count when session loaded
   useEffect(() => {
@@ -176,6 +212,25 @@ export default function GuestExamSession() {
             </div>
           </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <button className="btn btn-secondary btn-md" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+              onClick={handlePrintSheet} disabled={downloadingPDF}>
+              {downloadingPDF ? (
+                <><div className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} /> PDF...</>
+              ) : (
+                <><Printer size={14} /> Cetak PDF</>
+              )}
+            </button>
+            <button className="btn btn-secondary btn-md" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+              onClick={handlePrintWord} disabled={downloadingDocx}>
+              {downloadingDocx ? (
+                <><div className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} /> Word...</>
+              ) : (
+                <><FileText size={14} /> Cetak Word</>
+              )}
+            </button>
+          </div>
+
           <button className="btn btn-primary btn-lg" style={{ width: '100%' }}
             onClick={() => { clearGuest(); navigate('/'); }}>
             Selesai
@@ -201,7 +256,7 @@ export default function GuestExamSession() {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: '1rem', padding: '1rem', maxWidth: 1200, margin: '0 auto' }}>
+      <div className="exam-session-grid">
         <div>
           {q && (
             <div className="question-card slide-up" key={q.id}>

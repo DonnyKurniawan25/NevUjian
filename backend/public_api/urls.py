@@ -1,4 +1,5 @@
 from django.urls import path
+from exams.views import ExportSessionPDFView, ExportSessionDocxView
 from .views import (
     PublicExamDetailView,
     ValidateTokenView,
@@ -24,6 +25,10 @@ urlpatterns = [
     # Guest exam session endpoints
     path('exam-sessions/<uuid:session_id>/',
          GuestExamSessionDetailView.as_view(), name='public-exam-session'),
+    path('exam-sessions/<uuid:session_id>/export-pdf/',
+         ExportSessionPDFView.as_view(), name='public-export-session-pdf'),
+    path('exam-sessions/<uuid:session_id>/export-docx/',
+         ExportSessionDocxView.as_view(), name='public-export-session-docx'),
     path('exam-sessions/<uuid:session_id>/answer/',
          GuestAnswerView.as_view(), name='public-guest-answer'),
     path('exam-sessions/<uuid:session_id>/submit/',
