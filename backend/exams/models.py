@@ -251,14 +251,14 @@ class ExamSession(models.Model):
     student = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True, blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         related_name='exam_sessions',
         verbose_name='Siswa (Login)'
     )
     guest_participant = models.ForeignKey(
         GuestParticipant,
         null=True, blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         related_name='exam_sessions',
         verbose_name='Peserta Guest'
     )

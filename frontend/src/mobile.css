@@ -700,7 +700,13 @@
 
 @media (max-width: 1024px) {
     .questions-layout {
-        grid-template-columns: 1fr !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 1.25rem !important;
+    }
+
+    .questions-layout > div {
+        width: 100% !important;
     }
 
     .questions-layout .card {
@@ -719,3 +725,67 @@
         min-width: 100% !important;
     }
 }
+
+@media (max-width: 768px) {
+    /* Exclude card headers and inner card elements from generic flex-between column behavior */
+    .card-header.flex-between,
+    .card .flex-between {
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 0.5rem !important;
+    }
+
+    .card-header.flex-between > *,
+    .card .flex-between > * {
+        width: auto !important;
+    }
+
+    /* Exam Questions Header Responsive styling */
+    .exam-questions-header {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.75rem !important;
+        margin-bottom: 1rem;
+    }
+
+    .exam-questions-header .btn-back {
+        width: 100% !important;
+        justify-content: center;
+    }
+
+    .exam-questions-actions-wrapper {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.75rem !important;
+        width: 100% !important;
+    }
+
+    .exam-questions-meta {
+        display: flex !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+        background: var(--bg-secondary);
+        padding: 0.6rem 0.875rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-color);
+        box-sizing: border-box;
+    }
+
+    .exam-questions-buttons {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.5rem !important;
+        width: 100% !important;
+    }
+
+    .exam-questions-buttons .btn {
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0.65rem 0.5rem !important;
+        font-size: 0.78rem !important;
+        justify-content: center !important;
+    }
+}

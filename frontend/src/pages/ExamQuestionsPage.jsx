@@ -150,6 +150,13 @@ export default function ExamQuestionsPage() {
       choices: q.choices?.length ? q.choices.map(c => ({ choice_text: c.choice_text, is_correct: c.is_correct }))
         : [{ choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }],
     });
+    // Smooth scroll to form on mobile
+    setTimeout(() => {
+      const formEl = document.getElementById('question-form-card');
+      if (formEl) {
+        formEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   const handleDelete = async (qId) => {
@@ -175,23 +182,26 @@ export default function ExamQuestionsPage() {
 
   return (
     <div className="slide-up">
-      <div className="flex-between mb-2" style={{ flexWrap: 'wrap', gap: '1rem' }}>
-        <button className="btn btn-ghost" onClick={() => navigate('/exams')}><ArrowLeft size={16} /> Kembali</button>
-        <div className="flex gap-1" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary btn-sm" onClick={handleDownloadTemplate}>Unduh Template Excel</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setAiModal(true); setAiForm({ topic: '', question_type: 'multiple_choice', count: 5, points: 10 }); }} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary-600)', background: 'var(--primary-50)', border: '1px solid var(--primary-200)' }}>
-            <Sparkles size={14} /> Buat Soal AI
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={() => { setImportModal(true); setExcelFile(null); setImportErrors([]); }}>Import Excel</button>
-          <button className="btn btn-secondary btn-sm" onClick={handleExportDocx} disabled={exportingDocx || questions.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            {exportingDocx ? (
-              <><div className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} /> Mengunduh...</>
-            ) : (
-              <><FileText size={14} /> Export Word</>
-            )}
-          </button>
-          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            {exam?.title} — {questions.length} soal
+      <div className="exam-questions-header">
+        <button className="btn btn-ghost btn-back" onClick={() => navigate('/exams')}><ArrowLeft size={16} /> Kembali</button>
+        <div className="exam-questions-actions-wrapper">
+          <div className="exam-questions-meta">
+            <span className="exam-title-badge">{exam?.title}</span>
+            <span className="questions-count-badge">{questions.length} soal</span>
+          </div>
+          <div className="exam-questions-buttons">
+            <button className="btn btn-secondary btn-sm" onClick={handleDownloadTemplate}>Unduh Template Excel</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setAiModal(true); setAiForm({ topic: '', question_type: 'multiple_choice', count: 5, points: 10 }); }} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary-600)', background: 'var(--primary-50)', border: '1px solid var(--primary-200)' }}>
+              <Sparkles size={14} /> Buat Soal AI
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={() => { setImportModal(true); setExcelFile(null); setImportErrors([]); }}>Import Excel</button>
+            <button className="btn btn-secondary btn-sm" onClick={handleExportDocx} disabled={exportingDocx || questions.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              {exportingDocx ? (
+                <><div className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} /> Mengunduh...</>
+              ) : (
+                <><FileText size={14} /> Export Word</>
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -245,7 +255,7 @@ export default function ExamQuestionsPage() {
         </div>
 
         {/* Question Form */}
-        <div className="card" style={{ position: 'sticky', top: 80 }}>
+        <div id="question-form-card" className="card" style={{ position: 'sticky', top: 80 }}>
           <div className="card-header">
             <h3 className="card-title">{editing ? '✏️ Edit Soal' : '➕ Tambah Soal'}</h3>
             {editing && <button className="btn btn-ghost btn-sm" onClick={resetForm}>Batal</button>}
