@@ -522,9 +522,17 @@ class StudentExamSessionDetailView(generics.GenericAPIView):
             session.score = calculate_score(session)
             session.save()
 
-        questions = session.exam.questions.prefetch_related('choices').all()
+        pg_questions = session.exam.questions.prefetch_related('choices').filter(question_type='multiple_choice')
+        essay_questions = session.exam.questions.prefetch_related('choices').filter(question_type='essay')
+        
         if session.exam.shuffle_questions:
-            questions = questions.order_by('?')
+            pg_questions = pg_questions.order_by('?')
+            essay_questions = essay_questions.order_by('?')
+        else:
+            pg_questions = pg_questions.order_by('order')
+            essay_questions = essay_questions.order_by('order')
+            
+        questions = list(pg_questions) + list(essay_questions)
 
         session_data = ExamSessionSerializer(session).data
         session_data['questions'] = QuestionStudentSerializer(questions, many=True).data
@@ -1325,7 +1333,9 @@ class ExportSessionPDFView(generics.GenericAPIView):
             return Response({'error': 'Anda tidak memiliki akses ke lembar ujian ini.'}, status=status.HTTP_403_FORBIDDEN)
 
         exam = session.exam
-        questions = exam.questions.all().order_by('order')
+        pg_questions = exam.questions.filter(question_type='multiple_choice').order_by('order')
+        essay_questions = exam.questions.filter(question_type='essay').order_by('order')
+        questions = list(pg_questions) + list(essay_questions)
         answers = {ans.question_id: ans for ans in session.answers.all().select_related('selected_choice')}
 
         # Formatting date and time
@@ -1698,7 +1708,9 @@ class ExportSessionDocxView(generics.GenericAPIView):
             return Response({'error': 'Anda tidak memiliki akses ke lembar ujian ini.'}, status=status.HTTP_403_FORBIDDEN)
 
         exam = session.exam
-        questions = exam.questions.all().order_by('order')
+        pg_questions = exam.questions.filter(question_type='multiple_choice').order_by('order')
+        essay_questions = exam.questions.filter(question_type='essay').order_by('order')
+        questions = list(pg_questions) + list(essay_questions)
         answers = {ans.question_id: ans for ans in session.answers.all().select_related('selected_choice')}
 
         # Formatting date and time
@@ -2095,7 +2107,9 @@ class ExportQuestionsDocxView(generics.GenericAPIView):
         from docx.oxml import parse_xml
 
         exam = generics.get_object_or_404(Exam, pk=exam_id)
-        questions = exam.questions.all().order_by('order')
+        pg_questions = exam.questions.filter(question_type='multiple_choice').order_by('order')
+        essay_questions = exam.questions.filter(question_type='essay').order_by('order')
+        questions = list(pg_questions) + list(essay_questions)
 
         tahun_pelajaran = "-"
         now = timezone.now()

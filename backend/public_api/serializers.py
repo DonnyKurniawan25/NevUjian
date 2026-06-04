@@ -87,9 +87,17 @@ class GuestExamSessionSerializer(serializers.ModelSerializer):
         ]
 
     def get_questions(self, obj):
-        questions = obj.exam.questions.prefetch_related('choices').all()
+        pg_questions = obj.exam.questions.prefetch_related('choices').filter(question_type='multiple_choice')
+        essay_questions = obj.exam.questions.prefetch_related('choices').filter(question_type='essay')
+        
         if obj.exam.shuffle_questions:
-            questions = questions.order_by('?')
+            pg_questions = pg_questions.order_by('?')
+            essay_questions = essay_questions.order_by('?')
+        else:
+            pg_questions = pg_questions.order_by('order')
+            essay_questions = essay_questions.order_by('order')
+            
+        questions = list(pg_questions) + list(essay_questions)
         return QuestionStudentSerializer(questions, many=True).data
 
     def get_saved_answers(self, obj):
