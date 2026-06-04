@@ -11,10 +11,11 @@ export const examApi = {
   toggleActive: (id) => api.post(`/exams/${id}/toggle_active/`),
 
   // Questions
-  getQuestions: (examId) => api.get(`/exams/${examId}/questions/`),
+  getQuestions: (examId, params) => api.get(`/exams/${examId}/questions/`, { params }),
   createQuestion: (examId, data) => api.post(`/exams/${examId}/questions/`, data),
   updateQuestion: (examId, qId, data) => api.put(`/exams/${examId}/questions/${qId}/`, data),
   deleteQuestion: (examId, qId) => api.delete(`/exams/${examId}/questions/${qId}/`),
+  deleteAllQuestions: (examId) => api.delete(`/exams/${examId}/questions/delete-all/`),
   bulkCreateQuestions: (examId, questions) =>
     api.post(`/exams/${examId}/questions/bulk-create/`, { questions }),
   reorderQuestions: (examId, order) =>

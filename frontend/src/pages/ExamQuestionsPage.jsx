@@ -23,6 +23,11 @@ export default function ExamQuestionsPage() {
   const [generating, setGenerating] = useState(false);
   const [exportingDocx, setExportingDocx] = useState(false);
 
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalQuestions, setTotalQuestions] = useState(0);
+
   const handleExportDocx = async () => {
     try {
       setExportingDocx(true);
@@ -52,7 +57,11 @@ export default function ExamQuestionsPage() {
       await examApi.generateQuestionsAI(id, aiForm);
       toast.success('Soal berhasil dibuat otomatis menggunakan AI!');
       setAiModal(false);
-      load();
+      if (page === 1) {
+        load(1);
+      } else {
+        setPage(1);
+      }
     } catch (err) {
       toast.error(err.response?.data?.error || 'Gagal membuat soal dengan AI. Pastikan AI settings sudah aktif.');
       console.error(err);
@@ -88,7 +97,11 @@ export default function ExamQuestionsPage() {
       toast.success('Soal berhasil diimpor!');
       setImportModal(false);
       setExcelFile(null);
-      load();
+      if (page === 1) {
+        load(1);
+      } else {
+        setPage(1);
+      }
     } catch (err) {
       const data = err.response?.data;
       if (data?.errors) {
@@ -103,17 +116,29 @@ export default function ExamQuestionsPage() {
     }
   };
 
-  const load = async () => {
+  const load = async (currentPage = page) => {
     try {
-      const [examRes, qRes] = await Promise.all([examApi.getExam(id), examApi.getQuestions(id)]);
+      const [examRes, qRes] = await Promise.all([
+        examApi.getExam(id),
+        examApi.getQuestions(id, { page: currentPage })
+      ]);
       setExam(examRes.data);
       const qData = qRes.data.results || qRes.data;
       setQuestions(Array.isArray(qData) ? qData : []);
-    } catch { toast.error('Gagal memuat data'); }
-    finally { setLoading(false); }
+      
+      const total = qRes.data.count ?? (Array.isArray(qData) ? qData.length : 0);
+      setTotalQuestions(total);
+      setTotalPages(qRes.data.count ? Math.ceil(qRes.data.count / 20) : 1);
+    } catch { 
+      toast.error('Gagal memuat data'); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    load(page);
+  }, [id, page]);
 
   const resetForm = () => {
     setForm({ question_text: '', question_type: 'multiple_choice', points: 1, explanation: '', choices: [{ choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }] });
@@ -136,7 +161,7 @@ export default function ExamQuestionsPage() {
         toast.success('Soal ditambahkan');
       }
       resetForm();
-      load();
+      load(page);
     } catch { toast.error('Gagal menyimpan soal'); }
   };
 
@@ -161,8 +186,57 @@ export default function ExamQuestionsPage() {
 
   const handleDelete = async (qId) => {
     if (!confirm('Hapus soal ini?')) return;
-    try { await examApi.deleteQuestion(id, qId); toast.success('Soal dihapus'); load(); }
-    catch { toast.error('Gagal menghapus'); }
+    try { 
+      await examApi.deleteQuestion(id, qId); 
+      toast.success('Soal dihapus'); 
+      load(page); 
+    } catch { 
+      toast.error('Gagal menghapus'); 
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (!confirm('PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA soal dalam ujian ini? Tindakan ini tidak dapat dibatalkan.')) return;
+    setLoading(true);
+    try {
+      await examApi.deleteAllQuestions(id);
+      toast.success('Semua soal berhasil dihapus!');
+      if (page === 1) {
+        load(1);
+      } else {
+        setPage(1);
+      }
+    } catch {
+      toast.error('Gagal menghapus semua soal');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getPageNumbers = () => {
+    const range = [];
+    const delta = 2; // number of pages to show before and after current page
+    for (let i = Math.max(2, page - delta); i <= Math.min(totalPages - 1, page + delta); i++) {
+      range.push(i);
+    }
+    range.unshift(1);
+    if (totalPages > 1) {
+      range.push(totalPages);
+    }
+    // Remove duplicates and sort numerically
+    const uniqueRange = Array.from(new Set(range)).sort((a, b) => a - b);
+    
+    // Fix positioning of ellipsis dynamically
+    const finalRange = [];
+    for (let k = 0; k < uniqueRange.length; k++) {
+      const current = uniqueRange[k];
+      const next = uniqueRange[k + 1];
+      finalRange.push(current);
+      if (next && next - current > 1) {
+        finalRange.push('...');
+      }
+    }
+    return finalRange;
   };
 
   const updateChoice = (index, key, value) => {
@@ -187,7 +261,7 @@ export default function ExamQuestionsPage() {
         <div className="exam-questions-actions-wrapper">
           <div className="exam-questions-meta">
             <span className="exam-title-badge">{exam?.title}</span>
-            <span className="questions-count-badge">{questions.length} soal</span>
+            <span className="questions-count-badge">{totalQuestions} soal</span>
           </div>
           <div className="exam-questions-buttons">
             <button className="btn btn-secondary btn-sm" onClick={handleDownloadTemplate}>Unduh Template Excel</button>
@@ -195,7 +269,16 @@ export default function ExamQuestionsPage() {
               <Sparkles size={14} /> Buat Soal AI
             </button>
             <button className="btn btn-primary btn-sm" onClick={() => { setImportModal(true); setExcelFile(null); setImportErrors([]); }}>Import Excel</button>
-            <button className="btn btn-secondary btn-sm" onClick={handleExportDocx} disabled={exportingDocx || questions.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            {totalQuestions > 0 && (
+              <button 
+                className="btn btn-danger btn-sm" 
+                onClick={handleDeleteAll} 
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                <Trash2 size={14} /> Hapus Semua
+              </button>
+            )}
+            <button className="btn btn-secondary btn-sm" onClick={handleExportDocx} disabled={exportingDocx || totalQuestions === 0} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               {exportingDocx ? (
                 <><div className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} /> Mengunduh...</>
               ) : (
@@ -222,7 +305,7 @@ export default function ExamQuestionsPage() {
                 <div key={q.id} className="card" style={{ padding: '1rem 1.25rem' }}>
                   <div className="flex-between" style={{ marginBottom: '0.5rem' }}>
                     <div className="flex gap-1" style={{ alignItems: 'center' }}>
-                      <span className="badge badge-primary">Soal {i + 1}</span>
+                      <span className="badge badge-primary">Soal {(page - 1) * 20 + i + 1}</span>
                       <span className="badge badge-gray">{q.question_type === 'multiple_choice' ? 'PG' : 'Essay'}</span>
                       <span className="badge badge-gray">{q.points} poin</span>
                     </div>
@@ -250,6 +333,50 @@ export default function ExamQuestionsPage() {
                   )}
                 </div>
               ))}
+              
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  marginTop: '1.5rem',
+                  marginBottom: '1rem',
+                  flexWrap: 'wrap'
+                }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    disabled={page === 1}
+                    onClick={() => setPage(page - 1)}
+                  >
+                    Sebelumnya
+                  </button>
+                  
+                  {getPageNumbers().map((pageNum, idx) => (
+                    pageNum === '...' ? (
+                      <span key={`dots-${idx}`} style={{ color: 'var(--text-secondary)', padding: '0 0.25rem' }}>...</span>
+                    ) : (
+                      <button
+                        key={pageNum}
+                        className={`btn btn-sm ${page === pageNum ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ minWidth: '2rem', padding: '0.25rem 0.5rem' }}
+                        onClick={() => setPage(pageNum)}
+                      >
+                        {pageNum}
+                      </button>
+                    )
+                  ))}
+                  
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    disabled={page === totalPages}
+                    onClick={() => setPage(page + 1)}
+                  >
+                    Berikutnya
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

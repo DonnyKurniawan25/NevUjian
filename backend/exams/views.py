@@ -415,6 +415,19 @@ class QuestionViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = 'attachment; filename="template_soal_nevujian.xlsx"'
         return response
 
+    @action(detail=False, methods=['delete'], url_path='delete-all')
+    def delete_all(self, request, exam_id=None):
+        """Delete all questions for this exam."""
+        exam = generics.get_object_or_404(Exam, pk=exam_id)
+        
+        from django.db import transaction
+        try:
+            with transaction.atomic():
+                exam.questions.all().delete()
+            return Response({'detail': 'Semua soal berhasil dihapus.'}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': f"Gagal menghapus semua soal: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class StudentExamListView(generics.ListAPIView):
     """List available exams for logged-in students."""
