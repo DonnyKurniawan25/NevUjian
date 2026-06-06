@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { examApi } from '../api/examApi';
-import { ArrowLeft, Plus, Trash2, Save, GripVertical, Upload, Sparkles, FileText } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, GripVertical, Upload, Sparkles, FileText, ImagePlus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function ExamQuestionsPage() {
@@ -11,7 +11,7 @@ export default function ExamQuestionsPage() {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ question_text: '', question_type: 'multiple_choice', points: 1, explanation: '', choices: [{ choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }] });
+  const [form, setForm] = useState({ question_text: '', question_type: 'multiple_choice', points: 1, explanation: '', image: null, existingImage: null, remove_image: false, choices: [{ choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }] });
   
   const [importModal, setImportModal] = useState(false);
   const [excelFile, setExcelFile] = useState(null);
@@ -141,7 +141,7 @@ export default function ExamQuestionsPage() {
   }, [id, page]);
 
   const resetForm = () => {
-    setForm({ question_text: '', question_type: 'multiple_choice', points: 1, explanation: '', choices: [{ choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }] });
+    setForm({ question_text: '', question_type: 'multiple_choice', points: 1, explanation: '', image: null, existingImage: null, remove_image: false, choices: [{ choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }] });
     setEditing(null);
   };
 
@@ -172,6 +172,9 @@ export default function ExamQuestionsPage() {
       question_type: q.question_type,
       points: q.points,
       explanation: q.explanation || '',
+      image: null,
+      existingImage: q.image || null,
+      remove_image: false,
       choices: q.choices?.length ? q.choices.map(c => ({ choice_text: c.choice_text, is_correct: c.is_correct }))
         : [{ choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }, { choice_text: '', is_correct: false }],
     });
@@ -317,6 +320,14 @@ export default function ExamQuestionsPage() {
                     </div>
                   </div>
                   <p style={{ fontSize: '0.9rem', lineHeight: 1.6 }}>{q.question_text}</p>
+                  {q.image && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <img src={q.image} alt="Gambar soal" style={{
+                        maxWidth: '100%', maxHeight: 200, borderRadius: 'var(--radius-md)',
+                        border: '1px solid rgba(255,255,255,0.1)', objectFit: 'contain',
+                      }} />
+                    </div>
+                  )}
                   {q.choices?.length > 0 && (
                     <div style={{ marginTop: '0.75rem' }}>
                       {q.choices.map((c, j) => (
@@ -435,6 +446,72 @@ export default function ExamQuestionsPage() {
                 </button>
               </div>
             )}
+
+            {/* Image Upload */}
+            <div className="form-group">
+              <label className="form-label">Gambar Soal (opsional)</label>
+              {(form.image || (form.existingImage && !form.remove_image)) ? (
+                <div style={{
+                  position: 'relative', display: 'inline-block',
+                  border: '1px solid rgba(255,255,255,0.1)', borderRadius: 'var(--radius-md)',
+                  overflow: 'hidden', maxWidth: '100%',
+                }}>
+                  <img
+                    src={form.image ? URL.createObjectURL(form.image) : form.existingImage}
+                    alt="Preview"
+                    style={{ maxWidth: '100%', maxHeight: 180, display: 'block', objectFit: 'contain' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm({ ...form, image: null, existingImage: form.existingImage, remove_image: true });
+                    }}
+                    style={{
+                      position: 'absolute', top: 6, right: 6,
+                      background: 'rgba(239,68,68,0.9)', border: 'none', borderRadius: '50%',
+                      width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', color: '#fff', padding: 0,
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    border: '2px dashed rgba(255,255,255,0.12)', borderRadius: 'var(--radius-md)',
+                    padding: '1.25rem', textAlign: 'center', cursor: 'pointer',
+                    background: 'rgba(255,255,255,0.02)', transition: 'border-color 0.2s',
+                  }}
+                  onClick={() => document.getElementById('question-image-input').click()}
+                  onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--primary-400)'; }}
+                  onDragLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
+                    const file = e.dataTransfer.files[0];
+                    if (file && file.type.startsWith('image/')) {
+                      setForm({ ...form, image: file, remove_image: false });
+                    }
+                  }}
+                >
+                  <ImagePlus size={28} style={{ color: 'var(--primary-400)', marginBottom: '0.4rem' }} />
+                  <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Klik atau tarik gambar ke sini</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--gray-500)', marginTop: '0.2rem' }}>PNG, JPG, GIF (Maks 5MB)</div>
+                  <input
+                    id="question-image-input"
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      if (e.target.files[0]) {
+                        setForm({ ...form, image: e.target.files[0], remove_image: false });
+                      }
+                    }}
+                  />
+                </div>
+              )}
+            </div>
 
             <div className="form-group">
               <label className="form-label">Pembahasan (opsional)</label>

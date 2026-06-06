@@ -232,6 +232,14 @@ export default function GuestExamSession() {
                 <span className="badge badge-gray">{q.points} poin</span>
               </div>
               <div className="question-text">{q.question_text}</div>
+              {q.image && (
+                <div style={{ margin: '0.75rem 0' }}>
+                  <img src={q.image} alt="Gambar soal" style={{
+                    maxWidth: '100%', maxHeight: 300, borderRadius: 'var(--radius-md)',
+                    border: '1px solid rgba(255,255,255,0.1)', objectFit: 'contain',
+                  }} />
+                </div>
+              )}
 
               {q.question_type === 'multiple_choice' ? (
                 <div>

@@ -98,7 +98,7 @@ class GuestExamSessionSerializer(serializers.ModelSerializer):
             essay_questions = essay_questions.order_by('order')
             
         questions = list(pg_questions) + list(essay_questions)
-        return QuestionStudentSerializer(questions, many=True).data
+        return QuestionStudentSerializer(questions, many=True, context=self.context).data
 
     def get_saved_answers(self, obj):
         answers = StudentAnswer.objects.filter(session=obj).values(

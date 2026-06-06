@@ -4,6 +4,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import viewsets, generics, permissions, status
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -137,6 +138,7 @@ class QuestionViewSet(viewsets.ModelViewSet):
     """CRUD for questions within an exam."""
     serializer_class = QuestionSerializer
     permission_classes = [IsAdminOrTeacher]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
         exam_id = self.kwargs.get('exam_id')
@@ -535,7 +537,7 @@ class StudentExamSessionDetailView(generics.GenericAPIView):
         questions = list(pg_questions) + list(essay_questions)
 
         session_data = ExamSessionSerializer(session).data
-        session_data['questions'] = QuestionStudentSerializer(questions, many=True).data
+        session_data['questions'] = QuestionStudentSerializer(questions, many=True, context={'request': request}).data
 
         # Include existing answers
         existing_answers = StudentAnswer.objects.filter(

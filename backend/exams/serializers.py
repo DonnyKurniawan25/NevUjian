@@ -23,24 +23,45 @@ class AnswerChoiceStudentSerializer(serializers.ModelSerializer):
 
 class QuestionSerializer(serializers.ModelSerializer):
     choices = AnswerChoiceSerializer(many=True, required=False)
+    remove_image = serializers.BooleanField(required=False, write_only=True, default=False)
+    choices_json = serializers.CharField(required=False, write_only=True)
 
     class Meta:
         model = Question
         fields = ['id', 'question_text', 'question_type', 'points',
-                  'order', 'image', 'explanation', 'choices']
+                  'order', 'image', 'explanation', 'choices', 'remove_image', 'choices_json']
+
+    def _parse_choices(self, validated_data):
+        """Extract choices from either 'choices' or 'choices_json' field."""
+        choices_data = validated_data.pop('choices', None)
+        choices_json = validated_data.pop('choices_json', None)
+        if choices_data is not None:
+            return choices_data
+        if choices_json:
+            import json
+            try:
+                return json.loads(choices_json)
+            except (json.JSONDecodeError, TypeError):
+                return []
+        return None
 
     def create(self, validated_data):
-        choices_data = validated_data.pop('choices', [])
+        validated_data.pop('remove_image', False)
+        choices_data = self._parse_choices(validated_data)
         question = Question.objects.create(**validated_data)
-        for i, choice_data in enumerate(choices_data):
-            choice_data['order'] = i
-            AnswerChoice.objects.create(question=question, **choice_data)
+        if choices_data:
+            for i, choice_data in enumerate(choices_data):
+                choice_data['order'] = i
+                AnswerChoice.objects.create(question=question, **choice_data)
         return question
 
     def update(self, instance, validated_data):
-        choices_data = validated_data.pop('choices', None)
+        remove_image = validated_data.pop('remove_image', False)
+        choices_data = self._parse_choices(validated_data)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        if remove_image and not validated_data.get('image'):
+            instance.image = None
         instance.save()
 
         if choices_data is not None:

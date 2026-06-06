@@ -12,8 +12,28 @@ export const examApi = {
 
   // Questions
   getQuestions: (examId, params) => api.get(`/exams/${examId}/questions/`, { params }),
-  createQuestion: (examId, data) => api.post(`/exams/${examId}/questions/`, data),
-  updateQuestion: (examId, qId, data) => api.put(`/exams/${examId}/questions/${qId}/`, data),
+  createQuestion: (examId, data) => {
+    const formData = new FormData();
+    formData.append('question_text', data.question_text);
+    formData.append('question_type', data.question_type);
+    formData.append('points', data.points);
+    formData.append('explanation', data.explanation || '');
+    if (data.choices) formData.append('choices_json', JSON.stringify(data.choices));
+    if (data.image instanceof File) formData.append('image', data.image);
+    if (data.remove_image) formData.append('remove_image', 'true');
+    return api.post(`/exams/${examId}/questions/`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  updateQuestion: (examId, qId, data) => {
+    const formData = new FormData();
+    formData.append('question_text', data.question_text);
+    formData.append('question_type', data.question_type);
+    formData.append('points', data.points);
+    formData.append('explanation', data.explanation || '');
+    if (data.choices) formData.append('choices_json', JSON.stringify(data.choices));
+    if (data.image instanceof File) formData.append('image', data.image);
+    if (data.remove_image) formData.append('remove_image', 'true');
+    return api.put(`/exams/${examId}/questions/${qId}/`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   deleteQuestion: (examId, qId) => api.delete(`/exams/${examId}/questions/${qId}/`),
   deleteAllQuestions: (examId) => api.delete(`/exams/${examId}/questions/delete-all/`),
   bulkCreateQuestions: (examId, questions) =>
