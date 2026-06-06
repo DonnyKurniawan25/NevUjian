@@ -3,29 +3,29 @@ import { createContext, useContext, useState } from 'react';
 const GuestContext = createContext(null);
 
 export function GuestProvider({ children }) {
-  const [guestToken, setGuestToken] = useState(() => sessionStorage.getItem('guest_token'));
+  const [guestToken, setGuestToken] = useState(() => localStorage.getItem('guest_token'));
   const [guestInfo, setGuestInfo] = useState(() => {
-    const saved = sessionStorage.getItem('guest_info');
+    const saved = localStorage.getItem('guest_info');
     return saved ? JSON.parse(saved) : null;
   });
-  const [sessionId, setSessionId] = useState(() => sessionStorage.getItem('guest_session_id'));
+  const [sessionId, setSessionId] = useState(() => localStorage.getItem('guest_session_id'));
 
   const saveGuestData = (token, info) => {
-    sessionStorage.setItem('guest_token', token);
-    sessionStorage.setItem('guest_info', JSON.stringify(info));
+    localStorage.setItem('guest_token', token);
+    localStorage.setItem('guest_info', JSON.stringify(info));
     setGuestToken(token);
     setGuestInfo(info);
   };
 
   const saveSessionId = (id) => {
-    sessionStorage.setItem('guest_session_id', id);
+    localStorage.setItem('guest_session_id', id);
     setSessionId(id);
   };
 
   const clearGuest = () => {
-    sessionStorage.removeItem('guest_token');
-    sessionStorage.removeItem('guest_info');
-    sessionStorage.removeItem('guest_session_id');
+    localStorage.removeItem('guest_token');
+    localStorage.removeItem('guest_info');
+    localStorage.removeItem('guest_session_id');
     setGuestToken(null);
     setGuestInfo(null);
     setSessionId(null);

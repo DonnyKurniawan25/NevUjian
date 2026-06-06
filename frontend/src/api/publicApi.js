@@ -7,7 +7,7 @@ const publicApi = axios.create({
 
 // Add guest token to requests if available
 publicApi.interceptors.request.use((config) => {
-  const guestToken = sessionStorage.getItem('guest_token');
+  const guestToken = localStorage.getItem('guest_token');
   if (guestToken) {
     config.headers.Authorization = `Guest ${guestToken}`;
   }
